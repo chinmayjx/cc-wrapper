@@ -32,6 +32,8 @@ final class SettingsTray extends FrameLayout {
         void onDictationSwitch(boolean on);
         /** The tray opened or closed (for the Back handler). */
         void onTrayShown(boolean shown);
+        /** The refresh button: reload the page. */
+        void onReload();
     }
 
     private static final int ANIM_MS = 220;
@@ -79,9 +81,23 @@ final class SettingsTray extends FrameLayout {
         panel.setClickable(true); // touches on the panel don't fall through to "tap outside"
         addView(panel, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
 
+        // The header: the title, and at its right edge a button that reloads the page.
+        LinearLayout header = new LinearLayout(context);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = text(context, "Settings", 20, onSurface);
         title.setTypeface(Typeface.DEFAULT_BOLD);
-        panel.addView(title, margins(dp(20), dp(8), dp(20), dp(8)));
+        header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        android.widget.ImageButton reload = new android.widget.ImageButton(context);
+        reload.setImageResource(R.drawable.ic_refresh);
+        reload.setColorFilter(onSurface);
+        reload.setContentDescription("Reload the page");
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true);
+        reload.setBackgroundResource(ripple.resourceId);
+        reload.setOnClickListener(v -> host.onReload());
+        header.addView(reload, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        panel.addView(header, margins(dp(20), dp(4), dp(8), dp(4)));
 
         rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);

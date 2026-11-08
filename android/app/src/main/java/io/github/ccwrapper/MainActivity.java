@@ -258,6 +258,12 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
     }
 
     @Override
+    public void onReload() {
+        tray.close();
+        getBridge().getWebView().reload();
+    }
+
+    @Override
     public void onTrayShown(boolean shown) {
         closeTray.setEnabled(shown);
     }

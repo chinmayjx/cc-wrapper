@@ -1,0 +1,67 @@
+/* Phone fixes for claude.ai/code, scoped to the app via html[data-ccm-app]. */
+
+/* No grey flash on tap. */
+html[data-ccm-app] { -webkit-tap-highlight-color: transparent; }
+
+/* Narrow screens: the transcript keeps desktop-sized gutters (24-40px a side), leaving ~270px for text
+   on a 360px phone. Trim them to 10px. */
+@media (max-width: 600px) {
+  html[data-ccm-app] .tiles-shell { padding-inline-start: 0 !important; }
+  html[data-ccm-app] .epitaxy-transcript-column,
+  html[data-ccm-app] .mx-auto:has(> .group\/approval-dock) {
+    --chat-gutter: 10px !important;
+    --chat-gutter-start: 10px !important;
+    --chat-gutter-end: 10px !important;
+    padding-inline: 10px !important;
+  }
+}
+
+/* The composer dock (input box + mode/model row) cuts off the transcript with a hard edge at the input's
+   top; fade the transcript out above it instead. */
+html[data-ccm-app] .group\/approval-dock::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 20px; pointer-events: none;
+  background-color: inherit; /* the dock's own colour, so it follows light/dark theme */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000);
+  mask-image: linear-gradient(to bottom, transparent, #000);
+}
+
+/* Background tasks pill (see inject.js): a row in the composer dock above the input, so it sits on the dock's
+   background, flush with the input's left edge. Room for more pills later. */
+html[data-ccm-app] #ccm-bg-tasks {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; margin: 0;
+  padding: 5px 12px 5px 10px; border-radius: 999px; border: 1px solid rgb(128 128 128 / .25);
+  background: rgb(128 128 128 / .1); color: inherit; font: 500 13px/1.3 inherit;
+}
+html[data-ccm-app] #ccm-bg-tasks::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%; background: #D97757;
+  animation: ccm-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ccm-pulse { 50% { opacity: .3; } }
+/* While inject.js clicks through ⋯ → Background tasks. */
+html[data-ccm-quiet-menu] [role="menu"] { opacity: 0 !important; }
+
+/* Header on phones (see inject.js): only ⋯ shows. claude.ai folds Session rail, Changes, Files... into ⋯ itself;
+   Share, which it keeps out, stays laid out in the header's corner, invisible, so its popup still anchors there. */
+@media (max-width: 600px) {
+  html[data-ccm-app] .epitaxy-titlebar-end :is(button[aria-label="Share"], button[data-titlebar-share-slot]) {
+    position: absolute !important; inset-inline-end: 4px; opacity: 0 !important; pointer-events: none !important;
+  }
+  /* The header's fill stops 1.25rem short of the right edge (room for a desktop scrollbar) and the chat shows
+     through: run it to the edge. */
+  html[data-ccm-app] .epitaxy-titlebar { --title-bar-layer-end: 0px; }
+  /* The title stops short of ⋯ (claude.ai reserves room for Share): let it fill the row. */
+  html[data-ccm-app] .df-titlebar-sections > [class*="group/lead"] { flex: 1 1 auto !important; }
+  html[data-ccm-app] .df-titlebar-sections > [class*="group/lead"] :is(.cc-lined-title-group, h2) { flex: 1 1 auto; min-width: 0; }
+  html[data-ccm-app] .df-titlebar-sections .epitaxy-titlebar-end { margin-inline-start: 0 !important; padding-inline-start: 4px !important; }
+  html[data-ccm-app] .epitaxy-titlebar-end > [role="separator"],
+  html[data-ccm-app] .epitaxy-titlebar-end > span:has(> [role="separator"]) { display: none !important; }
+}
+html[data-ccm-app] [role="menu"] [data-ccm-moved="sep"] { height: 1px; margin: 4px 6px; background: rgb(128 128 128 / .25); }
+
+/* Context used (see inject.js), before the model in the composer's bottom strip. */
+html[data-ccm-app] #ccm-context {
+  display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 6px; border-radius: 6px;
+  font: inherit; font-size: 13px; color: var(--cds-text-secondary, inherit); opacity: .85; font-variant-numeric: tabular-nums;
+}
+html[data-ccm-app] #ccm-context[data-level="mid"] { color: #c99a2e; opacity: 1; }
+html[data-ccm-app] #ccm-context[data-level="high"] { color: #d97757; opacity: 1; }

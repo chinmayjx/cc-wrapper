@@ -1,0 +1,35 @@
+name: Android
+
+# Every pull request and push builds a debug APK, attached to the run as an artifact to try. There is no android/.env
+# here, so that APK has no push notifications; build your own with your Firebase values for those (see README).
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: android/package-lock.json
+      - run: npm ci
+        working-directory: android
+      - run: npx cap sync android
+        working-directory: android
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v5
+        with:
+          name: cc-wrapper-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk

@@ -1,0 +1,19 @@
+{
+  "name": "cc-wrapper",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Android shell for claude.ai/code with phone-friendly fixes injected",
+  "scripts": {
+    "sync": "cap sync android",
+    "build": "cap sync android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/core": "^7.6.9"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.9",
+    "typescript": "^5.9.3"
+  }
+}

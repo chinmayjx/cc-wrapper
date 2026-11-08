@@ -1,0 +1,118 @@
+apply plugin: 'com.android.application'
+
+// Per-user settings come from android/.env (gitignored; see .env.example and the README), or failing that from
+// environment variables of the same name (e.g. CI secrets). Every one is optional: an empty value turns its
+// feature off, so the app builds with no .env at all.
+def envFile = rootProject.file('.env')
+def dotEnv = [:]
+if (envFile.exists()) {
+    envFile.eachLine { line ->
+        def t = line.trim()
+        if (!t || t.startsWith('#') || !t.contains('=')) return
+        def i = t.indexOf('=')
+        def key = t.substring(0, i).trim().replaceFirst(/^export\s+/, '')
+        def value = t.substring(i + 1).trim()
+        if (value.length() >= 2 && (value[0] == '"' || value[0] == "'") && value[-1] == value[0]) value = value[1..-2]
+        dotEnv[key] = value
+    }
+}
+ext.setting = { String key -> (dotEnv[key] ?: System.getenv(key) ?: '').toString() }
+def javaString = { String v -> '"' + v.replace('\\', '\\\\').replace('"', '\\"') + '"' }
+
+def firebaseKeys = ['FIREBASE_PROJECT_ID', 'FIREBASE_SENDER_ID', 'FIREBASE_APP_ID', 'FIREBASE_API_KEY']
+def missingFirebase = firebaseKeys.findAll { !setting(it) }
+if (missingFirebase) {
+    logger.warn("cc-wrapper: push notifications will NOT work in this build: " +
+        (envFile.exists() ? "android/.env lacks ${missingFirebase.join(', ')}" : "no android/.env") +
+        " (see android/.env.example and the README).")
+}
+
+android {
+    namespace "io.github.ccwrapper"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "io.github.ccwrapper"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // CI passes -PversionCode=<run number> -PversionName=1.0.<run> so each release updates the last.
+        versionCode Integer.parseInt((project.findProperty("versionCode") ?: "1").toString())
+        versionName (project.findProperty("versionName") ?: "1.0").toString()
+        // Firebase client config for push (CCMApplication starts Firebase from these; empty = push off).
+        resValue "string", "firebase_project_id", setting('FIREBASE_PROJECT_ID')
+        resValue "string", "firebase_sender_id", setting('FIREBASE_SENDER_ID')
+        resValue "string", "firebase_app_id", setting('FIREBASE_APP_ID')
+        resValue "string", "firebase_api_key", setting('FIREBASE_API_KEY')
+        // Your server that sends the pushes: the app registers its FCM token there (empty = no registration).
+        buildConfigField "String", "PUSH_SERVER_URL", javaString(setting('PUSH_SERVER_URL'))
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildFeatures { buildConfig true }
+    // Release signing from CCM_KEYSTORE (path to a keystore), CCM_KEYSTORE_PASSWORD and CCM_KEY_ALIAS, in .env or
+    // the environment; without them the release build falls back to the debug key so local builds still work.
+    signingConfigs {
+        release {
+            def ks = setting('CCM_KEYSTORE')
+            if (ks) {
+                storeFile file(ks)
+                storePassword setting('CCM_KEYSTORE_PASSWORD')
+                keyAlias setting('CCM_KEY_ALIAS') ?: 'cc-mobile'
+                keyPassword setting('CCM_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        // "CC Wrapper Dev" installs next to the release app. With INJECT_DEV_URL set it reloads inject.js/inject.css
+        // from that URL whenever it comes to the front, so CSS/JS edits need no reinstall.
+        debug {
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            resValue "string", "app_name", "CC Wrapper Dev"
+            resValue "string", "title_activity_main", "CC Wrapper Dev"
+            def injectDev = setting('INJECT_DEV_URL')
+            buildConfigField "String", "INJECT_DEV_URL", javaString(injectDev && !injectDev.endsWith('/') ? injectDev + '/' : injectDev)
+            // Notification taps open <scheme>://session/<id>; separate schemes keep Dev and release apart.
+            buildConfigField "String", "LINK_SCHEME", '"ccm-dev"'
+            manifestPlaceholders = [linkScheme: "ccm-dev"]
+        }
+        release {
+            resValue "string", "app_name", "CC Wrapper"
+            resValue "string", "title_activity_main", "CC Wrapper"
+            buildConfigField "String", "INJECT_DEV_URL", '""'
+            buildConfigField "String", "LINK_SCHEME", '"ccm"'
+            manifestPlaceholders = [linkScheme: "ccm"]
+            signingConfig setting('CCM_KEYSTORE') ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    implementation "androidx.webkit:webkit:$androidxWebkitVersion"
+    // Session notifications through Firebase Cloud Messaging (started in CCMApplication when configured).
+    implementation platform('com.google.firebase:firebase-bom:33.7.0')
+    implementation 'com.google.firebase:firebase-messaging'
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+

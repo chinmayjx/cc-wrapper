@@ -1,0 +1,13 @@
+# Optional: the Cloudflare Tunnel that publishes the panel (see cloudflared-kindle.yml.example and the README).
+[Unit]
+Description=Cloudflare Tunnel for the Kindle panel
+After=network-online.target kindle.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config /etc/cloudflared-kindle/config.yml tunnel run
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

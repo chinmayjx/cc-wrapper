@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="robots" content="noindex">
+<title>Screen</title>
+<link rel="stylesheet" href="/ink.css?v=1">
+</head>
+<body>
+<div class="list" style="padding:20px">
+  <div class="who">Your Kindle browser</div>
+  <div id="out" style="font-family:'Courier New',monospace;font-size:22px;line-height:34px"></div>
+  <p style="margin-top:24px">Send Claude a photo of this page, or read these numbers out. They set the font size and lines per page.</p>
+</div>
+<script>
+var s = [
+  'viewport: ' + window.innerWidth + ' x ' + window.innerHeight,
+  'screen:   ' + screen.width + ' x ' + screen.height,
+  'dpr:      ' + (window.devicePixelRatio || 1),
+  'xhr:      ' + (window.XMLHttpRequest ? 'yes' : 'no'),
+  'fetch:    ' + (window.fetch ? 'yes' : 'no'),
+  'sse:      ' + (window.EventSource ? 'yes' : 'no'),
+  'ws:       ' + (window.WebSocket ? 'yes' : 'no'),
+  'ua:       ' + navigator.userAgent
+];
+document.getElementById('out').innerHTML = s.join('<br>').replace(/ /g, '&nbsp;');
+</script>
+</body>
+</html>

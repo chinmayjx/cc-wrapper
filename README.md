@@ -120,7 +120,10 @@ The app sends WebSocket pings every 30 s. A recording ends if the connection dro
 
 ## Kindle
 
-`kindle/` is a placeholder for a lightweight web frontend for Claude Code sessions on a Kindle's e-ink browser.
+`kindle/` is Ink, a lightweight web frontend for Claude Code on a Kindle's e-ink browser: your chats with their
+status, one chat paged like a book, sending a message or stopping Claude, artifacts as pages, and dictation
+through this app's Kindle dictation (the `/api/mic` WebSocket above). A small Python server; see
+[kindle/README.md](kindle/README.md).
 
 ## Works well with Otto
 

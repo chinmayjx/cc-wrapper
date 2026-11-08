@@ -1,0 +1,114 @@
+/* Kindle Paperwhite browser: old WebKit, e-ink. Black on white, no animation,
+   no shadows or grey fills, big tap targets. Avoid modern CSS. */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+body { font-family: Georgia, "Bookerly", serif; font-size: 22px; line-height: 32px; overflow: hidden; }
+a { color: #000; }
+button, input, textarea { font: inherit; color: #000; background: #fff; border-radius: 0; -webkit-appearance: none; outline: none; box-shadow: none; }
+textarea:focus, button:focus, input:focus { outline: none; }
+
+/* Chat list */
+.list { position: absolute; left: 0; right: 0; top: 0; bottom: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.chat { display: block; padding: 14px 18px 12px; border-bottom: 2px solid #000; text-decoration: none; }
+.chat .name { font-family: Helvetica, Arial, sans-serif; font-weight: bold; font-size: 22px; line-height: 28px; }
+.chat .state { float: right; font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 26px; padding: 0 8px; border: 2px solid #000; }
+.chat .state.wait { background: #000; color: #fff; }
+.chat .last { font-size: 19px; line-height: 26px; max-height: 52px; overflow: hidden; margin-top: 4px; }
+.chat .meta { font-family: Helvetica, Arial, sans-serif; font-size: 15px; line-height: 20px; }
+
+/* Paged chat */
+.page { position: absolute; left: 0; right: 0; top: 0; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.flow { padding: 0 20px 1px; } /* 1px keeps the last message's 32px margin inside the scroll height: that margin is the gap above the reply box */
+.who { font-family: Helvetica, Arial, sans-serif; font-weight: bold; font-size: 16px; line-height: 32px; height: 32px; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+.msg { margin: 0 0 32px; }
+.msg p { margin: 0 0 16px; }
+.msg.me { padding-left: 14px; border-left: 4px solid #000; }
+.msg.queued { color: #888; border-left-color: #aaa; }
+.msg ul { margin: 0 0 16px; padding-left: 26px; }
+code { font-family: "Courier New", monospace; font-size: 19px; }
+.ask { border: 3px solid #000; padding: 10px 14px; margin: 0 0 32px; }
+.ask b { font-family: Helvetica, Arial, sans-serif; }
+
+/* Reply box: the only thing at the bottom of a chat. Grows as you type. */
+.reply { position: absolute; left: 0; right: 0; bottom: 0; border-top: 3px solid #000; background: #fff; }
+.reply table { width: 100%; border-collapse: collapse; }
+.reply td { padding: 0; vertical-align: bottom; }
+.reply textarea { display: block; width: 100%; height: 61px; min-height: 61px; border: 0; padding: 15px 16px; font-size: 20px; line-height: 30px; resize: none; overflow: hidden; font-family: Georgia, serif; }
+.reply .send { width: 100px; border-left: 2px solid #000; }
+.reply .mic { width: 90px; border-left: 2px solid #000; }
+.reply button { width: 100%; height: 61px; border: 0; font-family: Helvetica, Arial, sans-serif; font-weight: bold; font-size: 18px; }
+
+/* Answer buttons inside Claude's question */
+.choices { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.choices td { padding: 0; width: 50%; }
+.choices td + td { padding-left: 12px; }
+.choices button { width: 100%; height: 56px; border: 3px solid #000; font-family: Helvetica, Arial, sans-serif; font-weight: bold; font-size: 20px; }
+
+/* Tool steps: one small line each */
+.tool { font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px; margin: 0 0 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.msg .tool:last-child { margin-bottom: 0; }
+pre { font-family: "Courier New", monospace; font-size: 16px; line-height: 22px; white-space: pre-wrap; word-wrap: break-word; margin: 0 0 16px; padding: 8px 10px; border-left: 3px solid #000; }
+.msg ol { margin: 0 0 16px; padding-left: 30px; }
+.msg li { margin: 0 0 4px; }
+.note, .status { font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 32px; margin: 0 0 32px; }
+.status { font-weight: bold; }
+.msg { word-wrap: break-word; }
+.chat.new { padding: 12px 18px; border-bottom: 3px solid #000; }
+.title { font-family: Helvetica, Arial, sans-serif; font-size: 26px; line-height: 32px; margin: 16px 0 0; }
+.doc .note { margin-bottom: 16px; }
+/* Stop: the Send button turns into it while Claude works and the box is empty */
+.reply button.stop { background: #000; color: #fff; }
+.reply button.on { background: #000; color: #fff; }
+.reply button.off { color: #999; }
+/* Chat switcher: ☰ sits inside the reply box while it's empty; the list covers the chat, not the reply bar. */
+.reply td.box { position: relative; }
+.reply textarea.withmenu { padding-left: 56px; }
+.reply #menub { position: absolute; left: 4px; top: 50%; margin-top: -24px; width: 48px; height: 48px; padding: 0; background: transparent; font-size: 26px; font-weight: normal; }
+.switcher { display: none; z-index: 3; position: absolute; left: 0; right: 0; top: 0; overflow-y: auto; background: #fff; font-family: Helvetica, Arial, sans-serif; }
+.switcher .row { display: block; padding: 14px 20px; border-bottom: 1px solid #000; font-size: 20px; line-height: 28px; color: #000; text-decoration: none; }
+.switcher .row.cur { font-weight: bold; }
+.switcher .tag { float: right; font-size: 14px; line-height: 24px; padding: 0 6px; border: 2px solid #000; margin-left: 8px; }
+.switcher .links { padding: 14px 20px; font-size: 18px; }
+.switcher .links a { color: #000; margin-right: 32px; }
+/* The artifact hub over a chat's whole message area (the reply box stays): the newest artifacts, or one open, under a bar with ×; an
+   open artifact also gets Back, to the list. */
+.split { display: none; position: absolute; left: 0; right: 0; top: 0; background: #fff; z-index: 2; }
+.split .bar { height: 40px; border-bottom: 2px solid #000; font-family: Helvetica, Arial, sans-serif; font-size: 17px; line-height: 38px; white-space: nowrap; overflow: hidden; }
+.split .bar button { height: 38px; border: 0; padding: 0 14px; font-family: Helvetica, Arial, sans-serif; font-weight: bold; font-size: 17px; background: transparent; }
+#artback { float: left; }
+#artx { float: right; font-size: 26px; font-weight: normal; }
+.split.home #artback { display: none; }
+.split.home #arttitle { padding-left: 20px; }
+#arttitle { display: block; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; }
+.artpage { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.artpage .row { display: block; padding: 12px 0; border-bottom: 1px solid #000; font-family: Helvetica, Arial, sans-serif; font-size: 19px; line-height: 26px; color: #000; text-decoration: none; }
+.artpage .row .tag { float: right; font-size: 14px; line-height: 24px; padding: 0 6px; border: 2px solid #000; margin-left: 8px; }
+.artpage .row .ago { font-size: 14px; color: #555; margin-left: 8px; }
+.reply #artb { position: absolute; right: 4px; top: 50%; margin-top: -24px; width: 48px; height: 48px; padding: 0; background: transparent; font-size: 26px; font-weight: normal; }
+.reply textarea.withmenu { padding-right: 56px; }
+/* The empty box's two lines: the chat's name, then model · effort · context. Each cut to one line, and starting
+   10px right of where the caret blinks, so the two don't overlap. */
+#hint { position: absolute; left: 66px; right: 56px; top: 50%; margin-top: -24px; height: 48px; font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px; color: #777; }
+#hint b, #hint span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hint b { color: #000; }
+/* A page with two lines of text, drawn with borders: the Kindle's fonts lack most document glyphs. */
+.docicon { position: relative; display: inline-block; vertical-align: middle; width: 20px; height: 26px; border: 2px solid #000; }
+.docicon:before, .docicon:after { content: ""; position: absolute; left: 3px; right: 3px; border-top: 2px solid #000; }
+.docicon:before { top: 6px; }
+.docicon:after { top: 12px; }
+.reply #artb.on, .reply #menub.on { background: #000; color: #fff; }
+.reply #artb.on .docicon, .reply #artb.on .docicon:before, .reply #artb.on .docicon:after { border-color: #fff; }
+.older { margin: 16px 0 32px; }
+.older button { border: 2px solid #000; padding: 6px 14px; font-family: Helvetica, Arial, sans-serif; font-size: 16px; }
+/* Errors: above the reply box, black so they're seen; a tap closes one. */
+.toast { display: none; position: absolute; left: 12px; right: 12px; z-index: 5; padding: 10px 14px; background: #000; color: #fff; font-family: Helvetica, Arial, sans-serif; font-size: 18px; line-height: 26px; max-height: 106px; overflow: hidden; }
+/* PDF and office pages, as images the column's width; a rule between pages. height: auto keeps the shape when
+   the column is narrower than the image (the reader measures again as each image loads). */
+.pg { display: block; max-width: 100%; height: auto; border-bottom: 1px solid #000; margin: 0 0 16px; }
+/* Markdown tables: ruled, a size down; tables too wide for the column come as one card per row. */
+/* A table wider than the column scrolls sideways by itself (display: block makes the table its own scroll box);
+   the page never does. */
+table.md { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-collapse: collapse; margin: 0 0 16px; font-size: 18px; line-height: 26px; }
+table.md th, table.md td { border: 1px solid #000; padding: 3px 8px; vertical-align: top; text-align: left; word-wrap: break-word; }
+table.md th { font-family: Helvetica, Arial, sans-serif; font-size: 16px; }
+.rowcard { border-left: 3px solid #000; padding-left: 12px; font-size: 19px; line-height: 28px; }

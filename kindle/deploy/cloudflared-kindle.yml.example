@@ -1,0 +1,13 @@
+# Optional: publish the panel through a Cloudflare Tunnel. cloudflared dials out to Cloudflare, so this machine
+# opens no port. Copy to /etc/cloudflared-kindle/config.yml and fill in your tunnel's id and hostname
+# (`cloudflared tunnel create kindle`, then `cloudflared tunnel route dns kindle kindle.example.com`).
+# Only the panel's port (KINDLE_LISTEN) goes through; everything else 404s. Put a Cloudflare Access application
+# in front of the hostname too: the panel refuses requests without Access's token for KINDLE_ACCESS_EMAIL.
+# Off switch: sudo systemctl stop cloudflared-kindle
+tunnel: <tunnel id>
+credentials-file: /etc/cloudflared-kindle/<tunnel id>.json
+no-autoupdate: true
+ingress:
+  - hostname: kindle.example.com
+    service: http://127.0.0.1:8790
+  - service: http_status:404

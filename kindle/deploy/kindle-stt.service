@@ -1,0 +1,18 @@
+# Optional: Whisper for Kindle dictation on a machine with a GPU (stt/stt_server.py). deploy/stt-server.sh fills in
+# @USER@, @KINDLE_DIR@, @VENV@ and @LISTEN@ (an address only your private network reaches, e.g. a Tailscale IP).
+[Unit]
+Description=Whisper large-v3-turbo for Kindle dictation
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+User=@USER@
+WorkingDirectory=@KINDLE_DIR@/stt
+# The CUDA libraries come from the venv's nvidia packages. Retries until the listen address exists at boot.
+# ($$ is a literal $ for systemd.)
+ExecStart=/bin/sh -c 'SP=$$(echo @VENV@/lib/python3*/site-packages/nvidia); LD_LIBRARY_PATH=$$SP/cublas/lib:$$SP/cudnn/lib exec @VENV@/bin/python stt_server.py $$(@LISTEN@) 8793'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+# The Kindle panel (python3 -m ink) as a systemd service. deploy/install.sh fills in @USER@ and @KINDLE_DIR@.
+[Unit]
+Description=Kindle panel for Claude Code (python3 -m ink; settings in @KINDLE_DIR@/.env)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=@USER@
+WorkingDirectory=@KINDLE_DIR@
+ExecStart=/usr/bin/python3 -m ink
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

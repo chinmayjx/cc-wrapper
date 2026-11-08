@@ -255,7 +255,8 @@ class MicHandler(BaseHTTPRequestHandler):
         sys.stderr.write("mic %s\n" % (fmt % args))
 
 
-def serve(listen):
+def server(listen):
+    """The mic's listener, bound (an address in use fails here, not later in a thread); call serve_forever()."""
     httpd = ThreadingHTTPServer(listen, MicHandler)
     httpd.daemon_threads = True
-    httpd.serve_forever()
+    return httpd

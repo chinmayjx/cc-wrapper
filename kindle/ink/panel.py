@@ -932,6 +932,8 @@ class InkHandler(BaseHTTPRequestHandler):
         sys.stderr.write("ink %s\n" % (fmt % args))
 
 
-def serve(listen=None):
+def server(listen=None):
     from http.server import ThreadingHTTPServer
-    ThreadingHTTPServer(listen or config.LISTEN, InkHandler).serve_forever()
+    httpd = ThreadingHTTPServer(listen or config.LISTEN, InkHandler)
+    httpd.daemon_threads = True
+    return httpd

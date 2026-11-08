@@ -66,13 +66,13 @@ android {
         }
     }
     buildTypes {
-        // "CC Wrapper Dev" installs next to the release app. With INJECT_DEV_URL set it reloads inject.js/inject.css
+        // "Claude Code Dev" installs next to the release app. With INJECT_DEV_URL set it reloads inject.js/inject.css
         // from that URL whenever it comes to the front, so CSS/JS edits need no reinstall.
         debug {
             applicationIdSuffix ".dev"
             versionNameSuffix "-dev"
-            resValue "string", "app_name", "CC Wrapper Dev"
-            resValue "string", "title_activity_main", "CC Wrapper Dev"
+            resValue "string", "app_name", "Claude Code Dev"
+            resValue "string", "title_activity_main", "Claude Code Dev"
             def injectDev = setting('INJECT_DEV_URL')
             buildConfigField "String", "INJECT_DEV_URL", javaString(injectDev && !injectDev.endsWith('/') ? injectDev + '/' : injectDev)
             // Notification taps open <scheme>://session/<id>; separate schemes keep Dev and release apart.
@@ -80,8 +80,8 @@ android {
             manifestPlaceholders = [linkScheme: "ccm-dev"]
         }
         release {
-            resValue "string", "app_name", "CC Wrapper"
-            resValue "string", "title_activity_main", "CC Wrapper"
+            resValue "string", "app_name", "Claude Code"
+            resValue "string", "title_activity_main", "Claude Code"
             buildConfigField "String", "INJECT_DEV_URL", '""'
             buildConfigField "String", "LINK_SCHEME", '"ccm"'
             manifestPlaceholders = [linkScheme: "ccm"]

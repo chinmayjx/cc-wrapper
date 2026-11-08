@@ -5,7 +5,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 // This directory is both the Capacitor project and the Gradle project, hence android.path '.'.
 const config: CapacitorConfig = {
   appId: 'io.github.ccwrapper',
-  appName: 'CC Wrapper',
+  appName: 'Claude Code',
   webDir: 'www',
   backgroundColor: '#faf9f5',
   server: {

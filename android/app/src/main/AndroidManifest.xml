@@ -41,6 +41,12 @@
             </intent-filter>
         </service>
 
+        <!-- Kindle dictation (the settings tray's switch): this phone's mic for the hub's Kindle panel -->
+        <service
+            android:name=".MicService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -59,4 +65,7 @@
     <!-- Dictation (the composer's mic button) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Kindle dictation: a foreground service that records while the phone is locked -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 </manifest>

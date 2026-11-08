@@ -19,7 +19,7 @@ import com.google.firebase.messaging.FirebaseMessaging;
 public class LinkRouter extends Plugin {
 
     /**
-     * From inject.js: a message was just sent in this session. Tells the push server (PUSH_SERVER_URL in
+     * From inject.js: a message was just sent in this session. Tells the push server (HUB_URL in
      * android/.env) which install the session was last used from, so it can send that session's notifications
      * to this phone only. Does nothing without a push server or Firebase.
      */
@@ -31,7 +31,7 @@ public class LinkRouter extends Plugin {
             return;
         }
         call.resolve();
-        if (BuildConfig.PUSH_SERVER_URL.isEmpty() || !CCMApplication.pushReady(getContext())) return;
+        if (BuildConfig.HUB_URL.isEmpty() || !CCMApplication.pushReady(getContext())) return;
         String app = getContext().getPackageName();
         FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token ->
             new Thread(() -> PushService.post("/api/activity", "session", session, "token", token, "app", app)).start());

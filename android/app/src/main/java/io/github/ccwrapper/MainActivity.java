@@ -2,15 +2,21 @@ package io.github.ccwrapper;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.MotionEvent;
+import android.view.VelocityTracker;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
+import android.widget.Toast;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -31,9 +37,24 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import org.json.JSONObject;
 
-public class MainActivity extends BridgeActivity {
+public class MainActivity extends BridgeActivity implements SettingsTray.Host {
     private static final String TAG = "CCMobile";
     private static final String ORIGIN = "https://claude.ai";
+    private static final int MIC_PERMISSION = 7;
+    /** The settings tray is pulled down from this strip at the top of the page (below the status bar). */
+    private static final int PULL_STRIP_DP = 48;
+
+    private SettingsTray tray;
+    private final OnBackPressedCallback closeTray = new OnBackPressedCallback(false) {
+        @Override
+        public void handleOnBackPressed() {
+            if (tray != null) tray.close();
+        }
+    };
+    // A downward drag from the top strip that may become a pull of the tray.
+    private boolean pullCandidate, pulling;
+    private float pullStartX, pullStartY;
+    private VelocityTracker pullVelocity;
 
     private String script;
     private String pendingSessionPath;
@@ -58,6 +79,8 @@ public class MainActivity extends BridgeActivity {
             Log.e(TAG, "inject assets missing", e);
         }
         openSessionLink(getIntent());
+        addTray();
+        getOnBackPressedDispatcher().addCallback(this, closeTray);
 
         // Session notifications (when this build has Firebase values): show them (asks once on Android 13+) and
         // keep the push server's copy of our token fresh.
@@ -154,6 +177,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        // Kindle dictation, if switched on: its foreground service may only take the mic while the app is in front.
+        MicService.ensureRunning(this);
+        if (tray != null) tray.refresh();
         // Debug build with INJECT_DEV_URL set (android/.env): pick up inject.js/inject.css edits from that server each time the app comes to the front.
         if (!BuildConfig.INJECT_DEV_URL.isEmpty()) new Thread(this::pullDevScript).start();
     }
@@ -211,5 +237,129 @@ public class MainActivity extends BridgeActivity {
         byte[] buf = new byte[8192];
         for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
         return out.toString(StandardCharsets.UTF_8.name());
+    }
+
+    // ---- the settings tray --------------------------------------------------------------------------------------
+
+    private void addTray() {
+        tray = new SettingsTray(this, this);
+        addContentView(tray, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // Dark/light or size changed (handled without recreating the activity): rebuild the tray to match.
+        if (tray != null) {
+            ((ViewGroup) tray.getParent()).removeView(tray);
+            closeTray.setEnabled(false);
+            addTray();
+        }
+    }
+
+    @Override
+    public void onTrayShown(boolean shown) {
+        closeTray.setEnabled(shown);
+    }
+
+    @Override
+    public void onDictationSwitch(boolean on) {
+        if (!on) {
+            MicService.turn(this, false);
+        } else if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            askForNotifications();
+            MicService.turn(this, true);
+        } else {
+            requestPermissions(new String[] { Manifest.permission.RECORD_AUDIO }, MIC_PERMISSION);
+            return; // the switch stays on until the answer (onRequestPermissionsResult)
+        }
+        tray.refresh();
+    }
+
+    /** The service's notification (Android 13+); dictation works without it, the notification just stays hidden. */
+    private void askForNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != MIC_PERMISSION) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            askForNotifications();
+            MicService.turn(this, true);
+        } else {
+            Toast.makeText(this, "Kindle dictation needs the microphone", Toast.LENGTH_SHORT).show();
+        }
+        if (tray != null) tray.refresh();
+    }
+
+    /**
+     * Pulls the tray down: a drag that starts in the top PULL_STRIP_DP of the page and goes down (more down than
+     * sideways) becomes the tray's; the page gets a cancel. Anything else (taps on the page's header, sideways or
+     * upward drags, everything below the strip) goes to the page untouched. The status bar above the page is the
+     * system's (the notification shade), so it never reaches here.
+     */
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent e) {
+        if (tray == null || (tray.isShowing() && !pulling)) return super.dispatchTouchEvent(e);
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                pulling = false;
+                int[] at = new int[2];
+                WebView web = getBridge().getWebView();
+                web.getLocationOnScreen(at);
+                float strip = PULL_STRIP_DP * getResources().getDisplayMetrics().density;
+                pullCandidate = e.getRawY() >= at[1] && e.getRawY() < at[1] + strip;
+                if (pullCandidate) {
+                    pullStartX = e.getRawX();
+                    pullStartY = e.getRawY();
+                    if (pullVelocity != null) pullVelocity.recycle();
+                    pullVelocity = VelocityTracker.obtain();
+                    pullVelocity.addMovement(e);
+                }
+                break;
+            }
+            case MotionEvent.ACTION_MOVE: {
+                if (!pullCandidate) break;
+                pullVelocity.addMovement(e);
+                float dy = e.getRawY() - pullStartY, dx = Math.abs(e.getRawX() - pullStartX);
+                int slop = ViewConfiguration.get(this).getScaledTouchSlop();
+                if (!pulling) {
+                    if (dy > slop && dy > 2 * dx) {
+                        pulling = true;
+                        MotionEvent cancel = MotionEvent.obtain(e);
+                        cancel.setAction(MotionEvent.ACTION_CANCEL);
+                        super.dispatchTouchEvent(cancel);
+                        cancel.recycle();
+                        tray.beginPull();
+                    } else if (dx > slop || dy < -slop) {
+                        pullCandidate = false;
+                    }
+                }
+                if (pulling) {
+                    tray.pullTo(dy - slop);
+                    return true;
+                }
+                break;
+            }
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (pulling) {
+                    pullVelocity.addMovement(e);
+                    pullVelocity.computeCurrentVelocity(1000);
+                    if (e.getActionMasked() == MotionEvent.ACTION_UP) tray.endPull(pullVelocity.getYVelocity());
+                    else tray.close();
+                    pulling = pullCandidate = false;
+                    return true;
+                }
+                pullCandidate = false;
+                break;
+            default: // a second finger: part of the pull while pulling
+                if (pulling) return true;
+        }
+        return super.dispatchTouchEvent(e);
     }
 }

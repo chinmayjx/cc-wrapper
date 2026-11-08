@@ -17,6 +17,8 @@ Claude account) and injects a small script and stylesheet before the page render
   the microphone works for dictation, and the offline page only appears when the network is really down.
 - **Push notifications** (needs your own Firebase project and a server that sends them; see below): a
   notification per session that opens it when tapped.
+- **A settings tray:** swipe down from the top bar of the page to pull it down. Its first setting is Kindle
+  dictation: the phone as the microphone of a Kindle (or any) frontend your server runs (see below).
 
 This is an unofficial, personal project. It is not affiliated with or endorsed by Anthropic. The injected fixes
 depend on claude.ai's current markup and can break when the site changes.
@@ -56,7 +58,7 @@ built without the Firebase values simply skips Firebase.
 | `FIREBASE_SENDER_ID` | Project settings → Cloud Messaging → Sender ID (= the project number) | no push |
 | `FIREBASE_APP_ID` | Project settings → General → Your apps → your Android app's App ID (`1:…:android:…`) | no push |
 | `FIREBASE_API_KEY` | Project settings → General → Web API key | no push |
-| `PUSH_SERVER_URL` | Base URL of your server that sends the pushes; the app registers its FCM token there | token only logged |
+| `HUB_URL` | Base URL of your server: the app registers its FCM token there, and Kindle dictation connects to it. `PUSH_SERVER_URL`, its old name, still works | token only logged, no Kindle dictation |
 | `INJECT_DEV_URL` | Debug build only: a URL serving `inject.js` and `inject.css`, re-fetched whenever the app comes to the front, so edits need no reinstall | bundled files only |
 | `CCM_KEYSTORE`, `CCM_KEYSTORE_PASSWORD`, `CCM_KEY_ALIAS` | Release signing: keystore path, its (and the key's) password, key alias (default `cc-mobile`) | release signed with the debug key |
 
@@ -71,13 +73,13 @@ the FCM HTTP v1 API with a service account of the same Firebase project.
    also work for the other).
 2. Put its four values in `android/.env` and rebuild. The app then starts Firebase, asks for the notification
    permission and gets an FCM token.
-3. Get the token to your server. With `PUSH_SERVER_URL` set, the app posts JSON to it:
-   - `POST <PUSH_SERVER_URL>/api/devices` with `{"token", "app", "name"}` on every launch and when the token
+3. Get the token to your server. With `HUB_URL` set, the app posts JSON to it:
+   - `POST <HUB_URL>/api/devices` with `{"token", "app", "name"}` on every launch and when the token
      changes (`app` is the package name, `name` the phone model);
-   - `POST <PUSH_SERVER_URL>/api/activity` with `{"session", "token", "app"}` when you send a message in a
+   - `POST <HUB_URL>/api/activity` with `{"session", "token", "app"}` when you send a message in a
      session, so a server that serves several phones can notify the one you last used for that session.
 
-   Without `PUSH_SERVER_URL` the token is only logged (`adb logcat -s CCMPush`), for you to copy by hand.
+   Without `HUB_URL` the token is only logged (`adb logcat -s CCMPush`), for you to copy by hand.
 4. Send data messages (not notification messages) to that token with these fields, all optional:
    `title`, `body`, `link` (`ccm://session/<claude.ai session id>`, opened on tap), `group` (a later push with
    the same group replaces the earlier notification; defaults to the link), `priority` (`high` to pop up),
@@ -85,6 +87,36 @@ the FCM HTTP v1 API with a service account of the same Firebase project.
 
 The Firebase values are client configuration rather than secrets, but they identify your project, so they stay
 out of the repo.
+
+## Settings tray
+
+Swipe down on the page's top bar (the strip just below the status bar, about 48dp tall) to pull the tray down
+over the page. Only a downward drag that starts in that strip opens it: taps on the page's header, scrolling and
+sideways swipes go to the page as before, and a swipe that starts on the status bar itself is still Android's
+notification shade. Swipe the tray up, tap below it or press Back to close it. It follows the system's dark or
+light mode.
+
+### Kindle dictation
+
+A Kindle has no microphone. With **Kindle dictation (use this phone's mic)** switched on in the tray, the phone
+records for a frontend your server runs (e.g. a Kindle panel's Mic button), with the phone locked or not. The
+first time, the app asks for the microphone (and on Android 13+ for notifications, for the service's ongoing
+notification, which also has a Turn off button). The switch is remembered: the service starts again whenever
+the app comes to the front. Needs `HUB_URL`.
+
+While it's on, a foreground service (type microphone) keeps a WebSocket open to `<HUB_URL as ws(s)>/api/mic`,
+reconnecting with backoff when it drops. The mic itself is only open between the server's `start` and `stop`:
+
+| Direction | Frame | Meaning |
+| --- | --- | --- |
+| phone → server | text `ready <device name>` | sent on connect |
+| server → phone | text `start` | start a recording |
+| phone → server | binary | 16 kHz mono 16-bit little-endian PCM, ~100 ms per frame, while recording |
+| server → phone | text `stop` | stop recording |
+| phone → server | text `stopped` | after the recording's last PCM frame |
+| phone → server | text `error <message>` | the mic couldn't start (busy, no permission) |
+
+The app sends WebSocket pings every 30 s. A recording ends if the connection drops.
 
 ## Kindle
 

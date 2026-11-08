@@ -42,8 +42,9 @@ android {
         resValue "string", "firebase_sender_id", setting('FIREBASE_SENDER_ID')
         resValue "string", "firebase_app_id", setting('FIREBASE_APP_ID')
         resValue "string", "firebase_api_key", setting('FIREBASE_API_KEY')
-        // Your server that sends the pushes: the app registers its FCM token there (empty = no registration).
-        buildConfigField "String", "PUSH_SERVER_URL", javaString(setting('PUSH_SERVER_URL'))
+        // Your server (HUB_URL; PUSH_SERVER_URL is its old name, still read): the app registers its FCM token there,
+        // and Kindle dictation connects to its /api/mic WebSocket (empty = neither).
+        buildConfigField "String", "HUB_URL", javaString((setting('HUB_URL') ?: setting('PUSH_SERVER_URL')).replaceAll('/+$', ''))
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -108,6 +109,8 @@ dependencies {
     // Session notifications through Firebase Cloud Messaging (started in CCMApplication when configured).
     implementation platform('com.google.firebase:firebase-bom:33.7.0')
     implementation 'com.google.firebase:firebase-messaging'
+    // The WebSocket to HUB_URL/api/mic for Kindle dictation (MicService).
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

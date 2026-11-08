@@ -69,10 +69,10 @@ public class PushService extends FirebaseMessagingService {
         context.getSystemService(NotificationManager.class).createNotificationChannel(channel);
     }
 
-    /** Tell the push server where to send pushes (POST <PUSH_SERVER_URL>/api/devices). Off the main thread; retried each launch. */
+    /** Tell the push server where to send pushes (POST <HUB_URL>/api/devices). Off the main thread; retried each launch. */
     static void register(Context context, String token) {
-        if (BuildConfig.PUSH_SERVER_URL.isEmpty()) {
-            Log.i(TAG, "FCM token (no PUSH_SERVER_URL set, so not registered anywhere): " + token);
+        if (BuildConfig.HUB_URL.isEmpty()) {
+            Log.i(TAG, "FCM token (no HUB_URL set, so not registered anywhere): " + token);
             return;
         }
         String app = context.getPackageName();
@@ -84,7 +84,7 @@ public class PushService extends FirebaseMessagingService {
         try {
             JSONObject json = new JSONObject();
             for (int i = 0; i + 1 < keyValues.length; i += 2) json.put(keyValues[i], keyValues[i + 1]);
-            HttpURLConnection c = (HttpURLConnection) new URL(BuildConfig.PUSH_SERVER_URL.replaceAll("/+$", "") + path).openConnection();
+            HttpURLConnection c = (HttpURLConnection) new URL(BuildConfig.HUB_URL.replaceAll("/+$", "") + path).openConnection();
             c.setRequestMethod("POST");
             c.setDoOutput(true);
             c.setConnectTimeout(8000);

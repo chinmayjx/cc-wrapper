@@ -65,3 +65,11 @@ html[data-ccm-app] #ccm-context {
 }
 html[data-ccm-app] #ccm-context[data-level="mid"] { color: #c99a2e; opacity: 1; }
 html[data-ccm-app] #ccm-context[data-level="high"] { color: #d97757; opacity: 1; }
+
+/* Connect: brings back a chat whose Remote Control stopped (inject.js). */
+html[data-ccm-app] .ccm-connect {
+  position: fixed; z-index: 2147483000; top: calc(env(safe-area-inset-top, 0px) + 56px); left: 50%; transform: translateX(-50%);
+  max-width: 90vw; padding: 8px 18px; border: 0; border-radius: 999px; font: 600 14px system-ui, sans-serif;
+  background: #d97757; color: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+html[data-ccm-app] .ccm-connect:disabled { opacity: .8; }

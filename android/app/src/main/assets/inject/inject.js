@@ -268,4 +268,72 @@
     }
     new MutationObserver(queue).observe(document.documentElement, { childList: true, subtree: true });
   }
+
+  // Connect: a chat whose Remote Control isn't running on the server (it rebooted, or the session stopped on its
+  // own) gets a button that brings it back (LinkRouter.connectSession). Only chats the server knows get one.
+  // Confirm a stopped session after 3s (new chats take a moment to start), then recheck while the button is
+  // visible. With no answer from the server (no internet, no VPN) there's no button.
+  if (!window.__ccmConnect) {
+    window.__ccmConnect = true;
+    const router = () => window.Capacitor?.Plugins?.LinkRouter;
+    let button = null, shown = '', busy = false;
+    let checked = '', timer, generation = 0, polling = false;
+    const sessionId = () => /\/code\/(session_[A-Za-z0-9]+)/.exec(location.pathname)?.[1];
+    const later = () => { clearTimeout(timer); timer = setTimeout(() => check(true), 3000); };
+    const setButton = (id, text) => {
+      if (!id) { clearTimeout(timer); polling = false; button?.remove(); button = null; shown = ''; return; }
+      if (!button) {
+        button = document.createElement('button');
+        button.className = 'ccm-connect';
+        button.onclick = async () => {
+          const session = shown, target = button;
+          busy = true;
+          clearTimeout(timer);
+          generation++; // ignore a state check already in flight when Connect was tapped
+          button.disabled = true;
+          button.textContent = 'Connecting…';
+          try {
+            await router()?.connectSession({ session });
+            busy = false;
+            if (button !== target) return check();
+            button.textContent = 'Connected';
+            setTimeout(() => { if (button === target) setButton(null); }, 2500);
+          } catch (e) {
+            busy = false;
+            if (button !== target) return check();
+            button.disabled = false;
+            button.textContent = e?.message || 'Couldn\'t connect';
+            setTimeout(() => { if (button && !busy) button.textContent = 'Connect'; }, 4000);
+            if (polling) later();
+          }
+        };
+        document.body.appendChild(button);
+      }
+      shown = id;
+      if (!busy && !button.disabled) button.textContent = text;
+    };
+    const check = async (again = false) => {
+      if (busy || !router()?.sessionState) return;
+      const id = sessionId();
+      if (!id) return setButton(null);
+      if (id === checked && !again) return;
+      checked = id;
+      const version = generation;
+      try {
+        const { state } = await router().sessionState({ session: id });
+        if (sessionId() !== id || version !== generation || busy) return;
+        polling = state === 'stopped';
+        if (polling) {
+          if (again) setButton(id, 'Connect');
+          later();
+        } else setButton(null);
+      } catch { if (version === generation && !busy && polling) later(); }
+    };
+    let last = location.pathname;
+    const moved = () => { if (location.pathname !== last) { last = location.pathname; generation++; checked = ''; setButton(null); check(); } };
+    // claude.ai switches chats with pushState; the Navigation API reports each change (WebView 102+).
+    if (window.navigation) navigation.addEventListener('currententrychange', moved);
+    else setInterval(moved, 700);
+    setTimeout(check, 1500);
+  }
 })();

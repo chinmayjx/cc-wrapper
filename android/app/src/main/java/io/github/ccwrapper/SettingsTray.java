@@ -431,7 +431,9 @@ final class SettingsTray extends FrameLayout {
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         words.addView(name);
-        words.addView(text(ctx, up ? "running" + (n > 0 ? " · " + n + (n == 1 ? " chat" : " chats") + " live" : "") : "stopped", 12, muted));
+        String when = ago(s.optLong("active"));
+        words.addView(text(ctx, (up ? "running" + (n > 0 ? " · " + n + (n == 1 ? " chat" : " chats") + " live" : "") : "stopped")
+            + (when.isEmpty() ? "" : " · " + when), 12, muted));
         row.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         String cwd = s.optString("cwd");
         if (!up) row.addView(iconButton(ctx, R.drawable.ic_play, accent, "Start", () -> LinkRouter.startServer(cwd), null));
@@ -502,6 +504,13 @@ final class SettingsTray extends FrameLayout {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(9), dp(9));
         p.rightMargin = dp(12);
         return p;
+    }
+
+    /** "5 min ago", "3 h ago", "2 d ago"; empty for 0 (never). */
+    private static String ago(long ms) {
+        if (ms <= 0) return "";
+        long s = Math.max(0, (System.currentTimeMillis() - ms) / 1000);
+        return s < 60 ? "just now" : s < 3600 ? (s / 60) + " min ago" : s < 86400 ? (s / 3600) + " h ago" : (s / 86400) + " d ago";
     }
 
     /** A folder as shown: its path under the home folder (~/code/personal/vault -> code/personal/vault). */

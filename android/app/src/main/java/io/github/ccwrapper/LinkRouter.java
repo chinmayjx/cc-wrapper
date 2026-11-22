@@ -44,27 +44,46 @@ public class LinkRouter extends Plugin {
     }
 
     /**
-     * For the settings tray's chats: every chat on the server's machine, newest first, from GET
-     * HUB_URL/api/sessions/chats: [{"session", "title", "cwd", "url", "running", "updated"}]. Throws with what's wrong.
+     * For the tray: the folders' Remote Control servers on your server's machine, and the chat on screen, from GET
+     * HUB_URL/api/sessions/servers?session=<id>: {"servers": [{"cwd", "running", "chats"}], "chat": {"session", "cwd",
+     * "running", "server"} | null}. Throws with what's wrong.
      */
-    static org.json.JSONArray chats() throws Exception {
+    static org.json.JSONObject servers(String session) throws Exception {
         if (BuildConfig.HUB_URL.isEmpty()) throw new Exception("Needs HUB_URL in android/.env at build time (see the README).");
-        String[] r = http("GET", BuildConfig.HUB_URL + "/api/sessions/chats", 5000, 20000);
+        String q = session == null ? "" : "?session=" + session;
+        String[] r = http("GET", BuildConfig.HUB_URL + "/api/sessions/servers" + q, 5000, 20000);
         if (r == null) throw new Exception("Can't reach your server. Is the VPN on?");
-        if (!r[0].equals("200")) throw new Exception("Your server couldn't list the chats (" + r[0] + ")");
-        return new org.json.JSONArray(r[1]);
+        if (!r[0].equals("200")) throw new Exception("Your server couldn't list its Claude servers (" + r[0] + ")");
+        return new org.json.JSONObject(r[1]);
     }
 
-    /** Connect: bring a chat back, with POST HUB_URL/api/sessions/<id>/connect. Throws with what's wrong. */
+    /** Start a folder's server (with its last chat): POST HUB_URL/api/sessions/servers/start {"cwd"}. */
+    static void startServer(String cwd) throws Exception {
+        String[] r = http("POST", BuildConfig.HUB_URL + "/api/sessions/servers/start", 8000, 90000,
+            new org.json.JSONObject().put("cwd", cwd).toString());
+        if (r == null) throw new Exception("Can't reach your server");
+        if (!r[0].equals("200")) throw new Exception(error(r, "Couldn't start it"));
+    }
+
+    /** Bring a chat back (starting its folder's server): POST HUB_URL/api/sessions/<id>/connect. */
     static void connect(String session) throws Exception {
         if (session == null || !session.matches("session_[A-Za-z0-9]+") || BuildConfig.HUB_URL.isEmpty()) throw new Exception("Not a chat");
-        String[] r = http("POST", BuildConfig.HUB_URL + "/api/sessions/" + session + "/connect", 8000, 60000);
+        String[] r = http("POST", BuildConfig.HUB_URL + "/api/sessions/" + session + "/connect", 8000, 90000, "{}");
         if (r == null) throw new Exception("Can't reach your server");
-        if (!r[0].equals("200")) throw new Exception(r[0].equals("404") ? "Not one of your server's chats" : "Couldn't reconnect");
+        if (!r[0].equals("200")) throw new Exception(r[0].equals("404") ? "Not one of your server's chats" : error(r, "Couldn't start it"));
+    }
+
+    /** The server's {"error"} text, else `fallback`. */
+    private static String error(String[] r, String fallback) {
+        try { return new org.json.JSONObject(r[1]).getString("error"); } catch (Exception e) { return fallback; }
     }
 
     /** {status code, body}, or null when the server doesn't answer. A POST sends an empty JSON object. */
     private static String[] http(String method, String url, int connectMs, int readMs) {
+        return http(method, url, connectMs, readMs, "{}");
+    }
+
+    private static String[] http(String method, String url, int connectMs, int readMs, String payload) {
         try {
             HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
             c.setRequestMethod(method);
@@ -73,7 +92,7 @@ public class LinkRouter extends Plugin {
             if (method.equals("POST")) {
                 c.setDoOutput(true);
                 c.setRequestProperty("Content-Type", "application/json");
-                try (OutputStream out = c.getOutputStream()) { out.write("{}".getBytes(StandardCharsets.UTF_8)); }
+                try (OutputStream out = c.getOutputStream()) { out.write(payload.getBytes(StandardCharsets.UTF_8)); }
             }
             int code = c.getResponseCode();
             InputStream in = code < 400 ? c.getInputStream() : c.getErrorStream();

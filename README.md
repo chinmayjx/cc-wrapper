@@ -17,12 +17,14 @@ Claude account) and injects a small script and stylesheet before the page render
   the microphone works for dictation, and the offline page only appears when the network is really down.
 - **Push notifications** (needs your own Firebase project and a server that sends them; see below): a
   notification per session that opens it when tapped.
-- **A tray of your chats and settings:** swipe down from the top bar of the page to pull it down. It lists the
-  chats on your server's machine (newest first, each with whether its Claude is running there); a tap opens one,
-  and Connect brings back one whose Claude stopped. Needs `GET HUB_URL/api/sessions/chats` answering
-  `[{"session", "title", "cwd", "url", "running", "updated"}]` and `POST HUB_URL/api/sessions/<id>/connect`
-  (the sessions server in kindle/README.md). Its first setting is Kindle dictation: the phone as the microphone of
-  a Kindle (or any) frontend your server runs (see below).
+- **A tray of your Claude servers and settings:** swipe down from the top bar of the page to pull it down. Your
+  server's machine runs one Remote Control server per folder, which starts a chat's Claude whenever a message comes
+  for it, so a chat works as long as its folder's server is up. The tray shows the chat on screen (its folder, and
+  whether that server is running, with Start if not) and every folder's server (running, how many chats it's
+  serving, Start on a stopped one). Needs `GET HUB_URL/api/sessions/servers?session=<id>`,
+  `POST HUB_URL/api/sessions/servers/start {"cwd"}` and `POST HUB_URL/api/sessions/<id>/connect` (the sessions
+  server in kindle/README.md). Its first setting is Kindle dictation: the phone as the microphone of a Kindle (or
+  any) frontend your server runs (see below).
 
 This is an unofficial, personal project. It is not affiliated with or endorsed by Anthropic. The injected fixes
 depend on claude.ai's current markup and can break when the site changes.

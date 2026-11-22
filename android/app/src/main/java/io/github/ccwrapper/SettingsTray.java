@@ -26,9 +26,11 @@ import androidx.core.view.WindowInsetsCompat;
  * page from the top. Swipe it up, tap below it or press Back to close it. Built in code, following the system's
  * dark or light mode like claude.ai does. Each setting is a row in {@link #rows}; Kindle dictation is the first.
  *
- * Above the settings, the chats on your server's machine (GET HUB_URL/api/sessions/chats), newest first: each says
- * whether its Claude is running there now, and a stopped one has Connect, which brings it back. A tap on one opens
- * it. The list is asked for each time the tray is pulled down, showing the last one meanwhile.
+ * Above the settings, your server's Claude servers (GET HUB_URL/api/sessions/servers): one Remote Control server per
+ * folder, which starts a chat's Claude when a message comes for it, so a chat works whenever its folder's server is
+ * up. First the chat on screen and whether its server is running (Start brings it up, with this chat); then every
+ * folder's server, running or not (Start on a stopped one). Asked for each time the tray is pulled down, showing the
+ * last answer meanwhile.
  */
 final class SettingsTray extends FrameLayout {
     interface Host {
@@ -59,13 +61,13 @@ final class SettingsTray extends FrameLayout {
     private float panelHeight;
     private final Runnable stateListener = () -> post(this::refresh);
 
-    // The chats: the list, a line saying what's going on, and the last list fetched (shown while a new one comes).
+    // The servers: this chat's, the list, a line saying what's going on, and the last answer (shown while a new one comes).
     private static final int RUNNING = 0xFF5FB87F;
-    private final LinearLayout chats;
-    private final android.widget.ScrollView chatsScroll;
-    private final TextView chatsStatus;
+    private final LinearLayout thisChat, servers;
+    private final android.widget.ScrollView serversScroll;
+    private final TextView serversStatus;
     private final int surface, onSurface, muted, accent, field;
-    private static org.json.JSONArray lastChats;
+    private static org.json.JSONObject last;
     private int generation;
 
     // A drag on the open tray (swipe up to close).
@@ -105,7 +107,7 @@ final class SettingsTray extends FrameLayout {
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = text(context, "Chats", 20, onSurface);
+        TextView title = text(context, "Claude servers", 20, onSurface);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         android.widget.ImageButton reload = new android.widget.ImageButton(context);
@@ -119,13 +121,16 @@ final class SettingsTray extends FrameLayout {
         header.addView(reload, new LinearLayout.LayoutParams(dp(48), dp(48)));
         panel.addView(header, margins(dp(20), dp(4), dp(8), dp(4)));
 
-        chatsStatus = text(context, "", 13, muted);
-        panel.addView(chatsStatus, margins(dp(20), 0, dp(20), dp(4)));
-        chatsScroll = new android.widget.ScrollView(context);
-        chats = new LinearLayout(context);
-        chats.setOrientation(LinearLayout.VERTICAL);
-        chatsScroll.addView(chats);
-        panel.addView(chatsScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        serversStatus = text(context, "", 13, muted);
+        panel.addView(serversStatus, margins(dp(20), 0, dp(20), dp(4)));
+        thisChat = new LinearLayout(context);
+        thisChat.setOrientation(LinearLayout.VERTICAL);
+        panel.addView(thisChat, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        serversScroll = new android.widget.ScrollView(context);
+        servers = new LinearLayout(context);
+        servers.setOrientation(LinearLayout.VERTICAL);
+        serversScroll.addView(servers);
+        panel.addView(serversScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView settings = text(context, "Settings", 13, muted);
         settings.setTypeface(Typeface.DEFAULT_BOLD);
@@ -202,7 +207,7 @@ final class SettingsTray extends FrameLayout {
     void beginPull() {
         panel.animate().cancel();
         refresh();
-        loadChats();
+        loadServers();
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         Insets bars = insets != null
             ? insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout())
@@ -329,120 +334,154 @@ final class SettingsTray extends FrameLayout {
         copy.recycle();
     }
 
-    // ---- the chats ---------------------------------------------------------------------------------------------
+    // ---- the servers ------------------------------------------------------------------------------------------
 
-    private void loadChats() {
+    /** The chat on screen's claude.ai id, or null. */
+    private String session() {
+        String url = host.currentUrl();
+        java.util.regex.Matcher m = url == null ? null : java.util.regex.Pattern.compile("/code/(session_[A-Za-z0-9]+)").matcher(url);
+        return m != null && m.find() ? m.group(1) : null;
+    }
+
+    private void loadServers() {
         int g = ++generation;
-        if (lastChats != null) showChats(lastChats);
-        else { chats.removeAllViews(); chatsStatus.setText("Loading your chats…"); chatsStatus.setVisibility(VISIBLE); }
+        String session = session();
+        if (last != null) show(last, session);
+        else { thisChat.removeAllViews(); servers.removeAllViews(); serversStatus.setText("Asking your server…"); serversStatus.setVisibility(VISIBLE); }
         new Thread(() -> {
             try {
-                org.json.JSONArray list = LinkRouter.chats();
-                post(() -> { if (g == generation) { lastChats = list; showChats(list); } });
+                org.json.JSONObject r = LinkRouter.servers(session);
+                post(() -> { if (g == generation) { last = r; show(r, session); } });
             } catch (Exception e) {
                 post(() -> {
                     if (g != generation) return;
-                    chatsStatus.setText(e.getMessage());
-                    chatsStatus.setVisibility(VISIBLE);
+                    serversStatus.setText(e.getMessage());
+                    serversStatus.setVisibility(VISIBLE);
                 });
             }
         }).start();
     }
 
-    private void showChats(org.json.JSONArray list) {
-        chats.removeAllViews();
-        chatsStatus.setVisibility(list.length() == 0 ? VISIBLE : GONE);
-        chatsStatus.setText("No chats on your server.");
-        String current = host.currentUrl();
+    private void show(org.json.JSONObject r, String session) {
+        thisChat.removeAllViews();
+        servers.removeAllViews();
+        serversStatus.setVisibility(GONE);
+        org.json.JSONObject chat = r.optJSONObject("chat");
+        // An answer from before a switch of chat says nothing of this one.
+        if (chat != null && !chat.optString("session").equals(session)) chat = null;
+        String here = chat == null ? null : chat.optString("cwd");
+        if (chat != null) thisChat.addView(chatCard(chat));
+        else if (session != null && r == last && r.has("servers")) {
+            TextView none = text(getContext(), "This chat isn't on your server.", 13, muted);
+            thisChat.addView(none, margins(dp(20), 0, dp(20), dp(6)));
+        }
+        org.json.JSONArray list = r.optJSONArray("servers");
+        if (list == null) return;
         for (int i = 0; i < list.length(); i++) {
-            org.json.JSONObject c = list.optJSONObject(i);
-            if (c != null) chats.addView(chatRow(c, current != null && current.startsWith(c.optString("url"))));
+            org.json.JSONObject s = list.optJSONObject(i);
+            if (s != null) servers.addView(serverRow(s, s.optString("cwd").equals(here)));
         }
         // At most half the screen: the rest scrolls.
         int max = getResources().getDisplayMetrics().heightPixels / 2;
-        chats.measure(MeasureSpec.makeMeasureSpec(Math.max(1, getWidth()), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
-        ViewGroup.LayoutParams lp = chatsScroll.getLayoutParams();
-        lp.height = Math.min(chats.getMeasuredHeight(), max);
-        chatsScroll.setLayoutParams(lp);
+        servers.measure(MeasureSpec.makeMeasureSpec(Math.max(1, getWidth()), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+        ViewGroup.LayoutParams lp = serversScroll.getLayoutParams();
+        lp.height = Math.min(servers.getMeasuredHeight(), max);
+        serversScroll.setLayoutParams(lp);
     }
 
-    private View chatRow(org.json.JSONObject c, boolean here) {
+    /** This chat: its folder, and whether its server is up (then messages reach it); Start if it isn't. */
+    private View chatCard(org.json.JSONObject chat) {
         Context ctx = getContext();
-        boolean running = c.optBoolean("running");
-        LinearLayout row = new LinearLayout(ctx);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(20), dp(9), dp(12), dp(9));
-        if (here) row.setBackgroundColor(field);
-        else {
-            TypedValue ripple = new TypedValue();
-            ctx.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple, true);
-            row.setBackgroundResource(ripple.resourceId);
-        }
-        String url = c.optString("url");
-        row.setOnClickListener(v -> host.onOpenChat(url));
-
-        View dot = new View(ctx);
-        dot.setBackground(round(running ? RUNNING : muted, dp(5)));
-        dot.setAlpha(running ? 1f : 0.5f);
-        LinearLayout.LayoutParams dp9 = new LinearLayout.LayoutParams(dp(9), dp(9));
-        dp9.rightMargin = dp(12);
-        row.addView(dot, dp9);
-
+        boolean up = chat.optBoolean("server");
+        LinearLayout card = new LinearLayout(ctx);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(14), dp(10), dp(10), dp(10));
+        card.setBackground(round(field, dp(12)));
+        View dot = dot(ctx, up);
+        card.addView(dot, dotParams());
         LinearLayout words = new LinearLayout(ctx);
         words.setOrientation(LinearLayout.VERTICAL);
-        String t = c.optString("title");
-        TextView name = text(ctx, t.isEmpty() ? "Untitled" : t, 15, onSurface);
-        name.setSingleLine(true);
-        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        words.addView(name);
-        TextView sub = text(ctx, describe(c, running), 12, muted);
-        sub.setSingleLine(true);
+        words.addView(text(ctx, "This chat · " + folder(chat.optString("cwd")), 15, onSurface));
+        TextView sub = text(ctx, up ? "Its server is running: messages reach it" : "Its server is stopped", 12, muted);
         words.addView(sub);
-        row.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        card.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        if (!up) card.addView(startButton(ctx, () -> LinkRouter.connect(chat.optString("session"))), startParams());
+        LinearLayout.LayoutParams lp = margins(dp(12), dp(2), dp(12), dp(8));
+        card.setLayoutParams(lp);
+        return card;
+    }
 
-        if (!running) {
-            TextView connect = text(ctx, "Connect", 13, accent);
-            connect.setTypeface(Typeface.DEFAULT_BOLD);
-            connect.setPadding(dp(14), dp(7), dp(14), dp(7));
-            connect.setBackground(round(field, dp(16)));
-            connect.setOnClickListener(v -> {
-                connect.setEnabled(false);
-                connect.setText("Connecting…");
-                new Thread(() -> {
-                    try {
-                        LinkRouter.connect(c.optString("session"));
-                        post(() -> {
-                            try { c.put("running", true); } catch (Exception ignored) {}
-                            dot.setBackground(round(RUNNING, dp(5)));
-                            dot.setAlpha(1f);
-                            sub.setText(describe(c, true));
-                            connect.setText("Connected");
-                            postDelayed(() -> connect.setVisibility(GONE), 1500);
-                        });
-                    } catch (Exception e) {
-                        post(() -> {
-                            connect.setText(e.getMessage());
-                            postDelayed(() -> { connect.setEnabled(true); connect.setText("Connect"); }, 4000);
-                        });
-                    }
-                }).start();
-            });
-            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            cp.leftMargin = dp(10);
-            row.addView(connect, cp);
-        }
+    /** A folder's server: running or not, how many chats it's serving now; Start if stopped. */
+    private View serverRow(org.json.JSONObject s, boolean here) {
+        Context ctx = getContext();
+        boolean up = s.optBoolean("running");
+        int n = s.optInt("chats");
+        LinearLayout row = new LinearLayout(ctx);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(20), dp(8), dp(12), dp(8));
+        if (here) row.setBackgroundColor(field);
+        row.addView(dot(ctx, up), dotParams());
+        LinearLayout words = new LinearLayout(ctx);
+        words.setOrientation(LinearLayout.VERTICAL);
+        TextView name = text(ctx, folder(s.optString("cwd")) + (here ? "  (this chat)" : ""), 15, onSurface);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        words.addView(name);
+        words.addView(text(ctx, up ? "running" + (n > 0 ? " · " + n + (n == 1 ? " chat" : " chats") + " live" : "") : "stopped", 12, muted));
+        row.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        if (!up) row.addView(startButton(ctx, () -> LinkRouter.startServer(s.optString("cwd"))), startParams());
         return row;
     }
 
-    /** "cc-mobile · running · 5 min ago": the folder's name, the state, when it was last active. */
-    private static String describe(org.json.JSONObject c, boolean running) {
-        String cwd = c.optString("cwd"), folder = cwd.substring(cwd.lastIndexOf('/') + 1);
-        String when = "";
-        try {
-            long s = (System.currentTimeMillis() - java.time.Instant.parse(c.optString("updated")).toEpochMilli()) / 1000;
-            when = s < 60 ? "just now" : s < 3600 ? (s / 60) + " min ago" : s < 86400 ? (s / 3600) + " h ago" : (s / 86400) + " d ago";
-        } catch (Exception ignored) {}
-        return (folder.isEmpty() ? "" : folder + " · ") + (running ? "running" : "stopped") + (when.isEmpty() ? "" : " · " + when);
+    interface Action { void run() throws Exception; }
+
+    /** Start: runs `action` (it takes a while: the server has to come up), then asks for the servers again. */
+    private TextView startButton(Context ctx, Action action) {
+        TextView b = text(ctx, "Start", 13, accent);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setPadding(dp(14), dp(7), dp(14), dp(7));
+        b.setBackground(round(dark ? 0xFF4A4945 : 0xFFE2DFD5, dp(16)));
+        b.setOnClickListener(v -> {
+            b.setEnabled(false);
+            b.setText("Starting…");
+            new Thread(() -> {
+                try {
+                    action.run();
+                    post(() -> { b.setText("Started"); loadServers(); });
+                } catch (Exception e) {
+                    post(() -> {
+                        b.setText(e.getMessage());
+                        postDelayed(() -> { b.setEnabled(true); b.setText("Start"); }, 4000);
+                    });
+                }
+            }).start();
+        });
+        return b;
+    }
+
+    private LinearLayout.LayoutParams startParams() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.leftMargin = dp(10);
+        return p;
+    }
+
+    private View dot(Context ctx, boolean up) {
+        View d = new View(ctx);
+        d.setBackground(round(up ? RUNNING : muted, dp(5)));
+        d.setAlpha(up ? 1f : 0.5f);
+        return d;
+    }
+
+    private LinearLayout.LayoutParams dotParams() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(9), dp(9));
+        p.rightMargin = dp(12);
+        return p;
+    }
+
+    /** A folder as shown: its path under the home folder (~/code/personal/vault -> code/personal/vault). */
+    private static String folder(String cwd) {
+        String s = cwd.replaceFirst("^/home/[^/]+/?", "").replaceFirst("^/root/?", "");
+        return s.isEmpty() ? "~ (home)" : s;
     }
 
     private static GradientDrawable round(int color, int radius) {

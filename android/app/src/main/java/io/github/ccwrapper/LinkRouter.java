@@ -65,6 +65,14 @@ public class LinkRouter extends Plugin {
         if (!r[0].equals("200")) throw new Exception(error(r, "Couldn't start it"));
     }
 
+    /** Delete a folder's server: stop it and leave it out of the list. POST HUB_URL/api/sessions/servers/delete {"cwd"}. */
+    static void deleteServer(String cwd) throws Exception {
+        String[] r = http("POST", BuildConfig.HUB_URL + "/api/sessions/servers/delete", 8000, 30000,
+            new org.json.JSONObject().put("cwd", cwd).toString());
+        if (r == null) throw new Exception("Can't reach your server");
+        if (!r[0].equals("200")) throw new Exception(error(r, "Couldn't delete it"));
+    }
+
     /** Bring a chat back (starting its folder's server): POST HUB_URL/api/sessions/<id>/connect. */
     static void connect(String session) throws Exception {
         if (session == null || !session.matches("session_[A-Za-z0-9]+") || BuildConfig.HUB_URL.isEmpty()) throw new Exception("Not a chat");

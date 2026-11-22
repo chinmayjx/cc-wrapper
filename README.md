@@ -21,8 +21,8 @@ Claude account) and injects a small script and stylesheet before the page render
   server's machine runs one Remote Control server per folder, which starts a chat's Claude whenever a message comes
   for it, so a chat works as long as its folder's server is up. The tray shows the chat on screen (its folder, and
   whether that server is running, with Start if not) and every folder's server (running, how many chats it's
-  serving, Start on a stopped one). Needs `GET HUB_URL/api/sessions/servers?session=<id>`,
-  `POST HUB_URL/api/sessions/servers/start {"cwd"}` and `POST HUB_URL/api/sessions/<id>/connect` (the sessions
+  serving, Start on a stopped one, Delete to stop one and drop it from the list). Needs
+  `GET HUB_URL/api/sessions/servers?session=<id>`, `POST HUB_URL/api/sessions/servers/start|delete {"cwd"}` and `POST HUB_URL/api/sessions/<id>/connect` (the sessions
   server in kindle/README.md). Its first setting is Kindle dictation: the phone as the microphone of a Kindle (or
   any) frontend your server runs (see below).
 

@@ -74,6 +74,7 @@ final class SettingsTray extends FrameLayout {
     private float downY;
     private boolean dragging;
     private boolean downOutside;
+    private boolean inList; // the touch began on the servers list
     private VelocityTracker velocity;
 
     SettingsTray(Context context, Host host) {
@@ -275,10 +276,13 @@ final class SettingsTray extends FrameLayout {
             case MotionEvent.ACTION_DOWN:
                 downY = e.getY();
                 dragging = false;
+                android.graphics.Rect r = new android.graphics.Rect();
+                inList = serversScroll.getGlobalVisibleRect(r) && r.contains((int) e.getRawX(), (int) e.getRawY());
                 track(e, true);
                 break;
             case MotionEvent.ACTION_MOVE:
                 track(e, false);
+                if (inList && serversScroll.canScrollVertically(1)) break; // the list scrolls; it isn't a close
                 if (downY - e.getY() > touchSlop) { // upward: take the gesture from the switch
                     dragging = true;
                     return true;
@@ -381,8 +385,8 @@ final class SettingsTray extends FrameLayout {
             org.json.JSONObject s = list.optJSONObject(i);
             if (s != null) servers.addView(serverRow(s, s.optString("cwd").equals(here)));
         }
-        // At most half the screen: the rest scrolls.
-        int max = getResources().getDisplayMetrics().heightPixels / 2;
+        // At most 55% of the screen: the rest scrolls.
+        int max = getResources().getDisplayMetrics().heightPixels * 55 / 100;
         servers.measure(MeasureSpec.makeMeasureSpec(Math.max(1, getWidth()), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
         ViewGroup.LayoutParams lp = serversScroll.getLayoutParams();
         lp.height = Math.min(servers.getMeasuredHeight(), max);
@@ -405,7 +409,7 @@ final class SettingsTray extends FrameLayout {
         TextView sub = text(ctx, up ? "Its server is running: messages reach it" : "Its server is stopped", 12, muted);
         words.addView(sub);
         card.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        if (!up) card.addView(startButton(ctx, () -> LinkRouter.connect(chat.optString("session"))), startParams());
+        if (!up) card.addView(iconButton(ctx, R.drawable.ic_play, accent, "Start", () -> LinkRouter.connect(chat.optString("session")), null));
         LinearLayout.LayoutParams lp = margins(dp(12), dp(2), dp(12), dp(8));
         card.setLayoutParams(lp);
         return card;
@@ -429,40 +433,62 @@ final class SettingsTray extends FrameLayout {
         words.addView(name);
         words.addView(text(ctx, up ? "running" + (n > 0 ? " · " + n + (n == 1 ? " chat" : " chats") + " live" : "") : "stopped", 12, muted));
         row.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        if (!up) row.addView(startButton(ctx, () -> LinkRouter.startServer(s.optString("cwd"))), startParams());
+        String cwd = s.optString("cwd");
+        if (!up) row.addView(iconButton(ctx, R.drawable.ic_play, accent, "Start", () -> LinkRouter.startServer(cwd), null));
+        row.addView(iconButton(ctx, R.drawable.ic_delete, muted, "Delete",
+            () -> LinkRouter.deleteServer(cwd),
+            "Delete the server of " + folder(cwd) + "?\n\nIt stops, with its chats' Claudes" + (here ? ", this chat's too" : "")
+                + ", and leaves the list until a chat starts there again."));
         return row;
     }
 
     interface Action { void run() throws Exception; }
 
-    /** Start: runs `action` (it takes a while: the server has to come up), then asks for the servers again. */
-    private TextView startButton(Context ctx, Action action) {
-        TextView b = text(ctx, "Start", 13, accent);
-        b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setPadding(dp(14), dp(7), dp(14), dp(7));
-        b.setBackground(round(dark ? 0xFF4A4945 : 0xFFE2DFD5, dp(16)));
-        b.setOnClickListener(v -> {
-            b.setEnabled(false);
-            b.setText("Starting…");
+    /**
+     * An icon button on a row: runs `action` off the UI thread (starting a server takes a while), with a spinner in
+     * its place meanwhile, then asks for the servers again. With `confirm`, asks first. A failure shows as a toast.
+     */
+    private View iconButton(Context ctx, int icon, int color, String label, Action action, String confirm) {
+        FrameLayout box = new FrameLayout(ctx);
+        android.widget.ImageButton b = new android.widget.ImageButton(ctx);
+        b.setImageResource(icon);
+        b.setColorFilter(color);
+        b.setContentDescription(label);
+        TypedValue ripple = new TypedValue();
+        ctx.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true);
+        b.setBackgroundResource(ripple.resourceId);
+        android.widget.ProgressBar spin = new android.widget.ProgressBar(ctx);
+        spin.setIndeterminateTintList(ColorStateList.valueOf(color));
+        spin.setVisibility(GONE);
+        box.addView(b, new LayoutParams(dp(44), dp(44)));
+        box.addView(spin, new LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        Runnable run = () -> {
+            b.setVisibility(INVISIBLE);
+            spin.setVisibility(VISIBLE);
             new Thread(() -> {
-                try {
-                    action.run();
-                    post(() -> { b.setText("Started"); loadServers(); });
-                } catch (Exception e) {
-                    post(() -> {
-                        b.setText(e.getMessage());
-                        postDelayed(() -> { b.setEnabled(true); b.setText("Start"); }, 4000);
-                    });
-                }
+                Exception failed = null;
+                try { action.run(); } catch (Exception e) { failed = e; }
+                Exception f = failed;
+                post(() -> {
+                    spin.setVisibility(GONE);
+                    b.setVisibility(VISIBLE);
+                    if (f != null) android.widget.Toast.makeText(ctx, f.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+                    loadServers();
+                });
             }).start();
+        };
+        b.setOnClickListener(v -> {
+            if (confirm == null) { run.run(); return; }
+            new android.app.AlertDialog.Builder(ctx)
+                .setMessage(confirm)
+                .setPositiveButton(label, (d, w) -> run.run())
+                .setNegativeButton("Cancel", null)
+                .show();
         });
-        return b;
-    }
-
-    private LinearLayout.LayoutParams startParams() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        p.leftMargin = dp(10);
-        return p;
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(44), dp(44));
+        p.leftMargin = dp(2);
+        box.setLayoutParams(p);
+        return box;
     }
 
     private View dot(Context ctx, boolean up) {

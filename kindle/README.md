@@ -124,7 +124,9 @@ stopped (reboot, idle) before a message goes to it, need something on the machin
 | --- | --- |
 | `GET /api/sessions/<id>` | `{"session", "cwd", "running"}`, or 404 if it isn't one of this machine's chats |
 | `GET /api/sessions/servers?session=<id>` | the folders' Remote Control servers: `{"servers": [{"cwd", "running", "chats"}], "chat": {"session", "cwd", "running", "server"} or null}` (the app's tray) |
+| `GET /api/sessions/servers/chats?cwd=` | one folder's server and its chats: `{"cwd", "running", "active", "live": [chat], "earlier": [chat]}`, chat `{"session", "title", "url", "working", "updated"}` |
 | `POST /api/sessions/servers/start` `{"cwd"}` | start that folder's server, with its last chat |
+| `POST /api/sessions/servers/stop` `{"cwd"}` | stop that folder's server |
 | `POST /api/sessions/servers/delete` `{"cwd"}` | stop that folder's server and leave it out of the list until a chat starts there again |
 | `GET /api/sessions/chats` | every chat on this machine's Remote Control servers, not archived, newest first: `[{"session", "title", "cwd", "url", "running", "updated"}]` (the app's tray) |
 | `GET /api/sessions/folders` | `{"folders": [...]}`: folders it has run chats in |

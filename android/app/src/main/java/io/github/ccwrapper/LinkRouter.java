@@ -65,6 +65,23 @@ public class LinkRouter extends Plugin {
         if (!r[0].equals("200")) throw new Exception(error(r, "Couldn't start it"));
     }
 
+    /** One folder's server and its chats: GET HUB_URL/api/sessions/servers/chats?cwd= -> {"cwd", "running", "active",
+     * "live": [chat], "earlier": [chat]}, chat {"session", "title", "url", "working", "updated"}. */
+    static org.json.JSONObject serverChats(String cwd) throws Exception {
+        String[] r = http("GET", BuildConfig.HUB_URL + "/api/sessions/servers/chats?cwd=" + java.net.URLEncoder.encode(cwd, "UTF-8"), 5000, 20000);
+        if (r == null) throw new Exception("Can't reach your server. Is the VPN on?");
+        if (!r[0].equals("200")) throw new Exception("Your server couldn't list this server's chats (" + r[0] + ")");
+        return new org.json.JSONObject(r[1]);
+    }
+
+    /** Stop a folder's server: POST HUB_URL/api/sessions/servers/stop {"cwd"}. */
+    static void stopServer(String cwd) throws Exception {
+        String[] r = http("POST", BuildConfig.HUB_URL + "/api/sessions/servers/stop", 8000, 30000,
+            new org.json.JSONObject().put("cwd", cwd).toString());
+        if (r == null) throw new Exception("Can't reach your server");
+        if (!r[0].equals("200")) throw new Exception(error(r, "Couldn't stop it"));
+    }
+
     /** Delete a folder's server: stop it and leave it out of the list. POST HUB_URL/api/sessions/servers/delete {"cwd"}. */
     static void deleteServer(String cwd) throws Exception {
         String[] r = http("POST", BuildConfig.HUB_URL + "/api/sessions/servers/delete", 8000, 30000,

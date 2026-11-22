@@ -17,14 +17,15 @@ Claude account) and injects a small script and stylesheet before the page render
   the microphone works for dictation, and the offline page only appears when the network is really down.
 - **Push notifications** (needs your own Firebase project and a server that sends them; see below): a
   notification per session that opens it when tapped.
-- **A tray of your Claude servers and settings:** swipe down from the top bar of the page to pull it down. Your
-  server's machine runs one Remote Control server per folder, which starts a chat's Claude whenever a message comes
-  for it, so a chat works as long as its folder's server is up. The tray shows the chat on screen (its folder, and
-  whether that server is running, with Start if not) and every folder's server (running, how many chats it's
-  serving, Start on a stopped one, Delete to stop one and drop it from the list). Needs
-  `GET HUB_URL/api/sessions/servers?session=<id>`, `POST HUB_URL/api/sessions/servers/start|delete {"cwd"}` and `POST HUB_URL/api/sessions/<id>/connect` (the sessions
-  server in kindle/README.md). Its first setting is Kindle dictation: the phone as the microphone of a Kindle (or
-  any) frontend your server runs (see below).
+- **An overlay of your Claude servers:** swipe down from the top bar of the page and it fades in, then covers the
+  screen (swipe up its bottom bar, or Back, to close). Your server's machine runs one Remote Control server per
+  folder, which starts a chat's Claude whenever a message comes for it, so a chat works as long as its folder's
+  server is up. It shows the chat on screen (whether its server is running, Start if not) and every folder's
+  server, most recently active first; a tap on one shows its chats (live, working or idle, and earlier ones; a tap
+  opens one) with Stop and Delete. Settings (Kindle dictation: the phone as the microphone of a Kindle or other
+  frontend your server runs, see below) are behind its gear. Needs `GET HUB_URL/api/sessions/servers?session=<id>`,
+  `GET HUB_URL/api/sessions/servers/chats?cwd=`, `POST HUB_URL/api/sessions/servers/start|stop|delete {"cwd"}` and
+  `POST HUB_URL/api/sessions/<id>/connect` (the sessions server in kindle/README.md).
 
 This is an unofficial, personal project. It is not affiliated with or endorsed by Anthropic. The injected fixes
 depend on claude.ai's current markup and can break when the site changes.

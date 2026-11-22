@@ -48,7 +48,7 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
     private final OnBackPressedCallback closeTray = new OnBackPressedCallback(false) {
         @Override
         public void handleOnBackPressed() {
-            if (tray != null) tray.close();
+            if (tray != null) tray.back();
         }
     };
     // A downward drag from the top strip that may become a pull of the tray.

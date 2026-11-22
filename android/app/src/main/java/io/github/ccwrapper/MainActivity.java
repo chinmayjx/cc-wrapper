@@ -250,6 +250,18 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
      * overlay. A tap shows the overlay, the next hides it. A tap, not a pull: pulls from the top edge are the
      * system's (the notification shade), and a pull on the page fought its own scrolling.
      */
+    private android.view.View.OnLayoutChangeListener handlePlacer;
+
+    private static void placeHandle(android.view.View h, WebView web) {
+        if (h.getParent() == null) return;
+        int[] at = new int[2], parent = new int[2];
+        web.getLocationInWindow(at);
+        ((android.view.View) h.getParent()).getLocationInWindow(parent);
+        int top = at[1] - parent[1];
+        ViewGroup.MarginLayoutParams m = (ViewGroup.MarginLayoutParams) h.getLayoutParams();
+        if (m.topMargin != top) { m.topMargin = top; h.setLayoutParams(m); }
+    }
+
     private void addHandle() {
         if (handle != null && handle.getParent() != null) ((ViewGroup) handle.getParent()).removeView(handle);
         float d = getResources().getDisplayMetrics().density;
@@ -269,13 +281,14 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
             android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL);
         addContentView(h, lp);
         h.setElevation(20 * d);
-        ViewCompat.setOnApplyWindowInsetsListener(h, (v, in) -> {
-            Insets bars = in.getInsets(WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.displayCutout());
-            android.view.ViewGroup.MarginLayoutParams m = (android.view.ViewGroup.MarginLayoutParams) v.getLayoutParams();
-            if (m.topMargin != bars.top) { m.topMargin = bars.top; v.setLayoutParams(m); }
-            return in;
-        });
-        ViewCompat.requestApplyInsets(h);
+        // At the top of the page: where the WebView starts (below the status bar). Not from window insets: the
+        // WebView takes those and consumes them (keepAboveKeyboard), so the handle never got any and sat under the
+        // status bar, out of sight.
+        WebView web = getBridge().getWebView();
+        if (handlePlacer != null) web.removeOnLayoutChangeListener(handlePlacer);
+        handlePlacer = (v, l, t, r, b, ol, ot, or, ob) -> placeHandle(h, web);
+        web.addOnLayoutChangeListener(handlePlacer);
+        h.post(() -> placeHandle(h, web));
         handle = h;
     }
 

@@ -147,7 +147,13 @@ final class SettingsTray extends FrameLayout {
     private void prepare() {
         while (stack.size() > 1) pop(false);
         loadServers();
-        ViewCompat.requestApplyInsets(this);
+        // The bars' insets, read directly: the WebView consumes the window's insets (MainActivity), so they may
+        // never be dispatched here.
+        WindowInsetsCompat in = ViewCompat.getRootWindowInsets(this);
+        if (in != null) {
+            Insets bars = in.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            frame.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+        }
         setVisibility(VISIBLE);
         place(0);
         host.onTrayShown(true);

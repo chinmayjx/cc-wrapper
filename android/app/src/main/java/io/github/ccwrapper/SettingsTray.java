@@ -26,9 +26,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * The servers overlay: pulled down from the top bar of the page (MainActivity drives the pull), it fades in and
- * slides down with the finger, then covers the whole screen. Open, it doesn't move with its content, so its lists
- * scroll on their own; the grab bar at the bottom (swipe it up, or tap it) or Back closes it. Built in code,
+ * The servers overlay: the handle at the top of the page (MainActivity) shows it, fading in and coming down a
+ * little, and covering the whole screen; the handle again, the grab bar at the bottom (swipe it up, or tap it) or
+ * Back hides it. It doesn't move with its content, so its lists scroll on their own. Built in code,
  * following the system's dark or light mode like claude.ai does.
  *
  * Its screens, one at a time (a new one slides in from the right; Back or the back arrow returns):
@@ -143,27 +143,22 @@ final class SettingsTray extends FrameLayout {
         super.onDetachedFromWindow();
     }
 
-    // ---- showing and hiding: the pull (driven by MainActivity), the grab bar, Back ------------------------------
+    // ---- showing and hiding: the handle (MainActivity), the grab bar, Back --------------------------------------
 
-    /** A pull from the top bar started: the servers screen, asked for afresh, still invisible. */
-    void beginPull() {
+    /** The handle was tapped: shows the overlay, or hides it when it's showing. */
+    void toggle() {
+        if (isShowing() && open) close();
+        else { prepare(); open(); }
+    }
+
+    /** About to show: the servers screen, asked for afresh, still invisible. */
+    private void prepare() {
         while (stack.size() > 1) pop(false);
         loadServers();
         ViewCompat.requestApplyInsets(this);
         setVisibility(VISIBLE);
         place(0);
         host.onTrayShown(true);
-    }
-
-    /** The finger is dy pixels below where the pull started: a third of the screen's height opens it fully. */
-    void pullTo(float dy) {
-        place(Math.max(0, Math.min(1, dy / (Math.max(1, getHeight()) / 3f))));
-    }
-
-    /** The finger lifted: open if pulled far enough (or flung down), else back up. */
-    void endPull(float velocityY) {
-        if (velocityY > dp(600) || (velocityY > -dp(600) && shown > 0.4f)) open();
-        else close();
     }
 
     void open() {
@@ -272,7 +267,7 @@ final class SettingsTray extends FrameLayout {
         p.setClickable(true);
         LinearLayout head = new LinearLayout(ctx);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setPadding(dp(backArrow ? 4 : 20), dp(6), dp(6), dp(6));
+        head.setPadding(dp(backArrow ? 4 : 20), dp(16), dp(6), dp(6)); // the handle sits above it
         if (backArrow) head.addView(icon(ctx, R.drawable.ic_back, onSurface, "Back", () -> pop(true)));
         TextView t = text(ctx, title, 20, onSurface);
         t.setTypeface(Typeface.DEFAULT_BOLD);

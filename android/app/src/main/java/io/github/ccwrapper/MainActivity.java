@@ -8,9 +8,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.MotionEvent;
-import android.view.VelocityTracker;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -41,8 +38,6 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
     private static final String TAG = "CCMobile";
     private static final String ORIGIN = "https://claude.ai";
     private static final int MIC_PERMISSION = 7;
-    /** The settings tray is pulled down from this strip at the top of the page (below the status bar). */
-    private static final int PULL_STRIP_DP = 48;
 
     private SettingsTray tray;
     private final OnBackPressedCallback closeTray = new OnBackPressedCallback(false) {
@@ -51,10 +46,7 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
             if (tray != null) tray.back();
         }
     };
-    // A downward drag from the top strip that may become a pull of the tray.
-    private boolean pullCandidate, pulling;
-    private float pullStartX, pullStartY;
-    private VelocityTracker pullVelocity;
+    private android.view.View handle; // the pill at the top that shows and hides the overlay
 
     private String script;
     private String pendingSessionPath;
@@ -250,6 +242,41 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
     private void addTray() {
         tray = new SettingsTray(this, this);
         addContentView(tray, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        addHandle();
+    }
+
+    /**
+     * The handle: a small pill at the top centre of the page, just below the status bar, above the page and the
+     * overlay. A tap shows the overlay, the next hides it. A tap, not a pull: pulls from the top edge are the
+     * system's (the notification shade), and a pull on the page fought its own scrolling.
+     */
+    private void addHandle() {
+        if (handle != null && handle.getParent() != null) ((ViewGroup) handle.getParent()).removeView(handle);
+        float d = getResources().getDisplayMetrics().density;
+        android.widget.FrameLayout h = new android.widget.FrameLayout(this);
+        android.view.View pill = new android.view.View(this);
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        g.setColor(dark ? 0x99A6A39A : 0x996B6A65);
+        g.setCornerRadius(3 * d);
+        pill.setBackground(g);
+        h.addView(pill, new android.widget.FrameLayout.LayoutParams(Math.round(36 * d), Math.round(5 * d),
+            android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL));
+        ((android.widget.FrameLayout.LayoutParams) pill.getLayoutParams()).topMargin = Math.round(4 * d);
+        h.setContentDescription("Claude servers");
+        h.setOnClickListener(v -> tray.toggle());
+        android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(Math.round(72 * d), Math.round(22 * d),
+            android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL);
+        addContentView(h, lp);
+        h.setElevation(20 * d);
+        ViewCompat.setOnApplyWindowInsetsListener(h, (v, in) -> {
+            Insets bars = in.getInsets(WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.displayCutout());
+            android.view.ViewGroup.MarginLayoutParams m = (android.view.ViewGroup.MarginLayoutParams) v.getLayoutParams();
+            if (m.topMargin != bars.top) { m.topMargin = bars.top; v.setLayoutParams(m); }
+            return in;
+        });
+        ViewCompat.requestApplyInsets(h);
+        handle = h;
     }
 
     @Override
@@ -311,72 +338,5 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
             Toast.makeText(this, "Kindle dictation needs the microphone", Toast.LENGTH_SHORT).show();
         }
         if (tray != null) tray.refresh();
-    }
-
-    /**
-     * Pulls the tray down: a drag that starts in the top PULL_STRIP_DP of the page and goes down (more down than
-     * sideways) becomes the tray's; the page gets a cancel. Anything else (taps on the page's header, sideways or
-     * upward drags, everything below the strip) goes to the page untouched. The status bar above the page is the
-     * system's (the notification shade), so it never reaches here.
-     */
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent e) {
-        if (tray == null || (tray.isShowing() && !pulling)) return super.dispatchTouchEvent(e);
-        switch (e.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN: {
-                pulling = false;
-                int[] at = new int[2];
-                WebView web = getBridge().getWebView();
-                web.getLocationOnScreen(at);
-                float strip = PULL_STRIP_DP * getResources().getDisplayMetrics().density;
-                pullCandidate = e.getRawY() >= at[1] && e.getRawY() < at[1] + strip;
-                if (pullCandidate) {
-                    pullStartX = e.getRawX();
-                    pullStartY = e.getRawY();
-                    if (pullVelocity != null) pullVelocity.recycle();
-                    pullVelocity = VelocityTracker.obtain();
-                    pullVelocity.addMovement(e);
-                }
-                break;
-            }
-            case MotionEvent.ACTION_MOVE: {
-                if (!pullCandidate) break;
-                pullVelocity.addMovement(e);
-                float dy = e.getRawY() - pullStartY, dx = Math.abs(e.getRawX() - pullStartX);
-                int slop = ViewConfiguration.get(this).getScaledTouchSlop();
-                if (!pulling) {
-                    if (dy > slop && dy > 2 * dx) {
-                        pulling = true;
-                        MotionEvent cancel = MotionEvent.obtain(e);
-                        cancel.setAction(MotionEvent.ACTION_CANCEL);
-                        super.dispatchTouchEvent(cancel);
-                        cancel.recycle();
-                        tray.beginPull();
-                    } else if (dx > slop || dy < -slop) {
-                        pullCandidate = false;
-                    }
-                }
-                if (pulling) {
-                    tray.pullTo(dy - slop);
-                    return true;
-                }
-                break;
-            }
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
-                if (pulling) {
-                    pullVelocity.addMovement(e);
-                    pullVelocity.computeCurrentVelocity(1000);
-                    if (e.getActionMasked() == MotionEvent.ACTION_UP) tray.endPull(pullVelocity.getYVelocity());
-                    else tray.close();
-                    pulling = pullCandidate = false;
-                    return true;
-                }
-                pullCandidate = false;
-                break;
-            default: // a second finger: part of the pull while pulling
-                if (pulling) return true;
-        }
-        return super.dispatchTouchEvent(e);
     }
 }

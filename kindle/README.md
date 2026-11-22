@@ -123,6 +123,7 @@ stopped (reboot, idle) before a message goes to it, need something on the machin
 | Request | Answer |
 | --- | --- |
 | `GET /api/sessions/<id>` | `{"session", "cwd", "running"}`, or 404 if it isn't one of this machine's chats |
+| `GET /api/sessions/chats` | every chat on this machine's Remote Control servers, not archived, newest first: `[{"session", "title", "cwd", "url", "running", "updated"}]` (the app's tray) |
 | `GET /api/sessions/folders` | `{"folders": [...]}`: folders it has run chats in |
 | `POST /api/sessions` `{"cwd"}` | a new chat there, `{"session", ...}`; 403 for a folder it won't use; 502 `{"error"}` |
 | `POST /api/sessions/<id>/connect` `{}` | bring the chat back; 404 if unknown |

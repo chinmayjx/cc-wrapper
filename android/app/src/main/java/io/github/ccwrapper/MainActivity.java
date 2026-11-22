@@ -120,7 +120,13 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
      */
     private void openSessionLink(Intent intent) {
         String url = LinkRouter.sessionUrl(intent);
-        if (url == null) return;
+        if (url != null) onOpenChat(url);
+    }
+
+    /** A chat from the tray's list, or a notification: https://claude.ai/code/session_... */
+    @Override
+    public void onOpenChat(String url) {
+        if (tray != null) tray.close();
         WebView webView = getBridge().getWebView();
         String current = webView.getUrl();
         String path = Uri.parse(url).getPath();
@@ -255,6 +261,11 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
             closeTray.setEnabled(false);
             addTray();
         }
+    }
+
+    @Override
+    public String currentUrl() {
+        return getBridge().getWebView().getUrl();
     }
 
     @Override

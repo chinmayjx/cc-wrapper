@@ -44,51 +44,23 @@ public class LinkRouter extends Plugin {
     }
 
     /**
-     * From inject.js, for the Connect button: is this session's Remote Control running on the server? "running",
-     * "stopped" (the server knows the session and it isn't running: it rebooted, or the session stopped on its own),
-     * "unknown" (the server doesn't know it, or there's no server: nothing to connect), or "unreachable" (no answer:
-     * no internet or no VPN, so nothing to offer). The server answers GET HUB_URL/api/sessions/<id> with
-     * {"running": true|false}, or 404.
+     * For the settings tray's chats: every chat on the server's machine, newest first, from GET
+     * HUB_URL/api/sessions/chats: [{"session", "title", "cwd", "url", "running", "updated"}]. Throws with what's wrong.
      */
-    @PluginMethod
-    public void sessionState(PluginCall call) {
-        String session = call.getString("session");
-        if (session == null || !session.matches("session_[A-Za-z0-9]+")) {
-            call.reject("no session");
-            return;
-        }
-        new Thread(() -> {
-            JSObject out = new JSObject();
-            if (BuildConfig.HUB_URL.isEmpty()) {
-                out.put("state", "unknown");
-            } else {
-                String[] r = http("GET", BuildConfig.HUB_URL + "/api/sessions/" + session, 4000, 4000);
-                try {
-                    if (r == null) out.put("state", "unreachable");
-                    else if (r[0].equals("404")) out.put("state", "unknown");
-                    else out.put("state", new org.json.JSONObject(r[1]).getBoolean("running") ? "running" : "stopped");
-                } catch (Exception e) {
-                    out.put("state", "unreachable");
-                }
-            }
-            call.resolve(out);
-        }).start();
+    static org.json.JSONArray chats() throws Exception {
+        if (BuildConfig.HUB_URL.isEmpty()) throw new Exception("Needs HUB_URL in android/.env at build time (see the README).");
+        String[] r = http("GET", BuildConfig.HUB_URL + "/api/sessions/chats", 5000, 20000);
+        if (r == null) throw new Exception("Can't reach your server. Is the VPN on?");
+        if (!r[0].equals("200")) throw new Exception("Your server couldn't list the chats (" + r[0] + ")");
+        return new org.json.JSONArray(r[1]);
     }
 
-    /** From inject.js, Connect: bring the session back, with POST HUB_URL/api/sessions/<id>/connect. */
-    @PluginMethod
-    public void connectSession(PluginCall call) {
-        String session = call.getString("session");
-        if (session == null || !session.matches("session_[A-Za-z0-9]+") || BuildConfig.HUB_URL.isEmpty()) {
-            call.reject("no session");
-            return;
-        }
-        new Thread(() -> {
-            String[] r = http("POST", BuildConfig.HUB_URL + "/api/sessions/" + session + "/connect", 8000, 60000);
-            if (r == null) call.reject("Can't reach the server");
-            else if (r[0].equals("200")) call.resolve();
-            else call.reject("Couldn't reconnect this chat");
-        }).start();
+    /** Connect: bring a chat back, with POST HUB_URL/api/sessions/<id>/connect. Throws with what's wrong. */
+    static void connect(String session) throws Exception {
+        if (session == null || !session.matches("session_[A-Za-z0-9]+") || BuildConfig.HUB_URL.isEmpty()) throw new Exception("Not a chat");
+        String[] r = http("POST", BuildConfig.HUB_URL + "/api/sessions/" + session + "/connect", 8000, 60000);
+        if (r == null) throw new Exception("Can't reach your server");
+        if (!r[0].equals("200")) throw new Exception(r[0].equals("404") ? "Not one of your server's chats" : "Couldn't reconnect");
     }
 
     /** {status code, body}, or null when the server doesn't answer. A POST sends an empty JSON object. */

@@ -7,10 +7,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.MotionEvent;
-import android.view.VelocityTracker;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -26,12 +23,11 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * The servers overlay: the handle at the top of the page (MainActivity) shows it, fading in and coming down a
- * little, and covering the whole screen; the handle again, the grab bar at the bottom (swipe it up, or tap it) or
- * Back hides it. It doesn't move with its content, so its lists scroll on their own. Built in code,
+ * The servers overlay: the handle at the top of the page (MainActivity) fades it in over the whole screen; the
+ * handle again, or Back, fades it out. It doesn't move, so its lists scroll on their own. Built in code,
  * following the system's dark or light mode like claude.ai does.
  *
- * Its screens, one at a time (a new one slides in from the right; Back or the back arrow returns):
+ * Its screens, one at a time (a new one fades in over the last; Back or the back arrow returns):
  * - Claude servers: the chat on screen (its folder, and whether that folder's server is running, with Start if not),
  *   then every folder's Remote Control server on your server's machine, most recently active first (running or
  *   stopped, chats it's serving, when; Start on a stopped one). A folder's server starts a chat's Claude whenever a
@@ -57,7 +53,6 @@ final class SettingsTray extends FrameLayout {
     interface Action { void run() throws Exception; }
 
     private static final int ANIM_MS = 220;
-    private static final int SLIDE_DP = 48; // how far above its place the overlay starts as it fades in
     private static final int RUNNING = 0xFF5FB87F;
 
     private final Host host;
@@ -66,7 +61,6 @@ final class SettingsTray extends FrameLayout {
     private final ArrayList<View> stack = new ArrayList<>();
     private final int bg, card, line, onSurface, muted, accent;
     private final boolean dark;
-    private final int touchSlop;
     private boolean open;
     private float shown; // 0 (gone) .. 1 (open), as the pull or the grab bar leaves it
 
@@ -85,7 +79,6 @@ final class SettingsTray extends FrameLayout {
     SettingsTray(Context context, Host host) {
         super(context);
         this.host = host;
-        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         dark = (context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         bg = dark ? 0xFF262624 : 0xFFFAF9F5;
         card = dark ? 0xFF30302E : 0xFFF0EEE6;
@@ -104,7 +97,6 @@ final class SettingsTray extends FrameLayout {
 
         pages = new FrameLayout(context);
         frame.addView(pages, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        frame.addView(grabBar(context), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)));
 
         View servers = serversPage(context);
         stack.add(servers);
@@ -143,7 +135,7 @@ final class SettingsTray extends FrameLayout {
         super.onDetachedFromWindow();
     }
 
-    // ---- showing and hiding: the handle (MainActivity), the grab bar, Back --------------------------------------
+    // ---- showing and hiding: the handle (MainActivity), Back ---------------------------------------------------
 
     /** The handle was tapped: shows the overlay, or hides it when it's showing. */
     void toggle() {
@@ -198,63 +190,10 @@ final class SettingsTray extends FrameLayout {
         settling.start();
     }
 
-    /** 0: gone; 1: open. It fades in and comes down from a little above its place. */
+    /** 0: gone; 1: open. It only fades. */
     private void place(float f) {
         shown = f;
         setAlpha(f);
-        frame.setTranslationY(-dp(SLIDE_DP) * (1 - f));
-    }
-
-    /** The bar at the bottom: swipe it up to close (or tap it). */
-    private View grabBar(Context ctx) {
-        FrameLayout bar = new FrameLayout(ctx);
-        View pill = new View(ctx);
-        pill.setBackground(round(muted, dp(2)));
-        pill.setAlpha(0.6f);
-        bar.addView(pill, new LayoutParams(dp(40), dp(4), Gravity.CENTER));
-        bar.setContentDescription("Close");
-        bar.setOnTouchListener(new OnTouchListener() {
-            float downY;
-            boolean dragging;
-            VelocityTracker velocity;
-
-            @Override
-            public boolean onTouch(View v, MotionEvent e) {
-                MotionEvent raw = MotionEvent.obtain(e);
-                raw.setLocation(e.getRawX(), e.getRawY()); // the overlay moves under the finger
-                try {
-                    switch (e.getActionMasked()) {
-                        case MotionEvent.ACTION_DOWN:
-                            downY = e.getRawY();
-                            dragging = false;
-                            if (velocity != null) velocity.recycle();
-                            velocity = VelocityTracker.obtain();
-                            velocity.addMovement(raw);
-                            return true;
-                        case MotionEvent.ACTION_MOVE:
-                            velocity.addMovement(raw);
-                            float up = downY - e.getRawY();
-                            if (!dragging && up > touchSlop) dragging = true;
-                            if (dragging) place(Math.max(0, Math.min(1, 1 - (up - touchSlop) / (Math.max(1, getHeight()) / 3f))));
-                            return true;
-                        case MotionEvent.ACTION_UP:
-                            velocity.addMovement(raw);
-                            velocity.computeCurrentVelocity(1000);
-                            float vy = velocity.getYVelocity();
-                            if (!dragging || vy < -dp(600) || shown < 0.6f) close();
-                            else open();
-                            return true;
-                        case MotionEvent.ACTION_CANCEL:
-                            open();
-                            return true;
-                    }
-                    return false;
-                } finally {
-                    raw.recycle();
-                }
-            }
-        });
-        return bar;
     }
 
     // ---- screens ------------------------------------------------------------------------------------------------
@@ -291,19 +230,17 @@ final class SettingsTray extends FrameLayout {
         View under = stack.get(stack.size() - 1);
         stack.add(p);
         pages.addView(p);
-        float w = Math.max(1, getWidth());
-        p.setTranslationX(w);
-        p.animate().translationX(0).setDuration(ANIM_MS).start();
-        under.animate().translationX(-w / 4).setDuration(ANIM_MS).start();
+        p.setAlpha(0f);
+        p.animate().alpha(1f).setDuration(ANIM_MS).withEndAction(() -> under.setVisibility(INVISIBLE)).start();
     }
 
     private void pop(boolean animate) {
         if (stack.size() < 2) return;
         View top = stack.remove(stack.size() - 1), under = stack.get(stack.size() - 1);
         if (top == settingsPage) { dictation = null; settingsPage = null; }
-        if (!animate) { top.animate().cancel(); pages.removeView(top); under.animate().cancel(); under.setTranslationX(0); return; }
-        top.animate().translationX(getWidth()).setDuration(ANIM_MS).withEndAction(() -> pages.removeView(top)).start();
-        under.animate().translationX(0).setDuration(ANIM_MS).start();
+        under.setVisibility(VISIBLE);
+        if (!animate) { top.animate().cancel(); pages.removeView(top); return; }
+        top.animate().alpha(0f).setDuration(ANIM_MS).withEndAction(() -> pages.removeView(top)).start();
     }
 
     // The servers screen.

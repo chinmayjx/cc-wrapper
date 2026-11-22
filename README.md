@@ -18,7 +18,7 @@ Claude account) and injects a small script and stylesheet before the page render
 - **Push notifications** (needs your own Firebase project and a server that sends them; see below): a
   notification per session that opens it when tapped.
 - **An overlay of your Claude servers:** tap the small handle at the top centre of the page and it fades in over
-  the screen; tap it again (or swipe up its bottom bar, or Back) to close. Your server's machine runs one Remote Control server per
+  the screen; tap it again (or Back) to close. Your server's machine runs one Remote Control server per
   folder, which starts a chat's Claude whenever a message comes for it, so a chat works as long as its folder's
   server is up. It shows the chat on screen (whether its server is running, Start if not) and every folder's
   server, most recently active first; a tap on one shows its chats (live, working or idle, and earlier ones; a tap

@@ -158,10 +158,12 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
      * system bars, so the keyboard covered the composer. Same margins as Capacitor's, but the bottom one is
      * whichever is taller: the navigation bar or the keyboard.
      */
-    private static void keepAboveKeyboard(WebView webView) {
+    private void keepAboveKeyboard(WebView webView) {
         ViewCompat.setOnApplyWindowInsetsListener(webView, (v, windowInsets) -> {
             Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
+            topInset = bars.top;
+            placeHandle();
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
             mlp.leftMargin = bars.left;
             mlp.topMargin = bars.top;
@@ -178,6 +180,7 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
         // Kindle dictation, if switched on: its foreground service may only take the mic while the app is in front.
         MicService.ensureRunning(this);
         if (tray != null) tray.refresh();
+        ViewCompat.requestApplyInsets(getBridge().getWebView()); // re-places the handle too
         // Debug build with INJECT_DEV_URL set (android/.env): pick up inject.js/inject.css edits from that server each time the app comes to the front.
         if (!BuildConfig.INJECT_DEV_URL.isEmpty()) new Thread(this::pullDevScript).start();
     }
@@ -250,16 +253,22 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
      * overlay. A tap shows the overlay, the next hides it. A tap, not a pull: pulls from the top edge are the
      * system's (the notification shade), and a pull on the page fought its own scrolling.
      */
-    private android.view.View.OnLayoutChangeListener handlePlacer;
+    private int topInset = -1; // the status bar's height, from the insets the WebView is placed by
 
-    private static void placeHandle(android.view.View h, WebView web) {
-        if (h.getParent() == null) return;
-        int[] at = new int[2], parent = new int[2];
-        web.getLocationInWindow(at);
-        ((android.view.View) h.getParent()).getLocationInWindow(parent);
-        int top = at[1] - parent[1];
-        ViewGroup.MarginLayoutParams m = (ViewGroup.MarginLayoutParams) h.getLayoutParams();
-        if (m.topMargin != top) { m.topMargin = top; h.setLayoutParams(m); }
+    /**
+     * Just below the status bar: the same inset the WebView's top margin comes from (keepAboveKeyboard), set
+     * while insets are dispatched, before layout. Copying the WebView's position after layout missed updates and
+     * left the handle under the status bar, out of sight.
+     */
+    private void placeHandle() {
+        if (handle == null) return;
+        int top = topInset;
+        if (top < 0) {
+            WindowInsetsCompat root = ViewCompat.getRootWindowInsets(getWindow().getDecorView());
+            top = root == null ? 0 : root.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()).top;
+        }
+        ViewGroup.MarginLayoutParams m = (ViewGroup.MarginLayoutParams) handle.getLayoutParams();
+        if (m != null && m.topMargin != top) { m.topMargin = top; handle.setLayoutParams(m); }
     }
 
     private void addHandle() {
@@ -281,15 +290,8 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
             android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL);
         addContentView(h, lp);
         h.setElevation(20 * d);
-        // At the top of the page: where the WebView starts (below the status bar). Not from window insets: the
-        // WebView takes those and consumes them (keepAboveKeyboard), so the handle never got any and sat under the
-        // status bar, out of sight.
-        WebView web = getBridge().getWebView();
-        if (handlePlacer != null) web.removeOnLayoutChangeListener(handlePlacer);
-        handlePlacer = (v, l, t, r, b, ol, ot, or, ob) -> placeHandle(h, web);
-        web.addOnLayoutChangeListener(handlePlacer);
-        h.post(() -> placeHandle(h, web));
         handle = h;
+        placeHandle();
     }
 
     @Override

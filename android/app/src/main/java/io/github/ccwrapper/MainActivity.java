@@ -115,6 +115,13 @@ public class MainActivity extends BridgeActivity implements SettingsTray.Host {
         if (url != null) onOpenChat(url);
     }
 
+    /** A claude.ai link that asked for a new window: a chat switches in place, any other page loads here (Back returns). */
+    void openInMain(String url) {
+        String path = Uri.parse(url).getPath();
+        if (path != null && path.startsWith("/code/session_")) onOpenChat(url);
+        else getBridge().getWebView().loadUrl(url);
+    }
+
     /** A chat from the tray's list, or a notification: https://claude.ai/code/session_... */
     @Override
     public void onOpenChat(String url) {

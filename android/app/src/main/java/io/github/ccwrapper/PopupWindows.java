@@ -24,7 +24,8 @@ import com.getcapacitor.BridgeWebChromeClient;
 /**
  * window.open() support. "Continue with Google" opens Google in a popup that reports back to
  * claude.ai through window.opener; without real popups Google loads in place of claude.ai and fails.
- * Popups for sign-in hosts open in a full-screen dialog; any other new window goes to the browser.
+ * Popups for sign-in hosts open in a full-screen dialog; claude.ai's own links load in the main view; any other new
+ * window goes to the browser.
  */
 class PopupWindows extends BridgeWebChromeClient {
     private final Bridge bridge;
@@ -49,6 +50,12 @@ class PopupWindows extends BridgeWebChromeClient {
             || host.equals("accounts.google.co.in");
     }
 
+    /** claude.ai itself (not sign-in): opened in the main view, never a popup. */
+    static boolean isClaude(Uri uri) {
+        String host = uri.getHost();
+        return host != null && (host.equals("claude.ai") || host.endsWith(".claude.ai"));
+    }
+
     @Override
     public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
         WebView popup = new WebView(view.getContext());
@@ -65,6 +72,13 @@ class PopupWindows extends BridgeWebChromeClient {
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
                 Uri uri = req.getUrl();
+                if (firstLoad && isClaude(uri) && bridge.getActivity() instanceof MainActivity) {
+                    // A claude.ai link opened in a new window (a link in a chat): the app's own page, so in the main
+                    // view. In this popup it covered the app, handle and all, looking just like it.
+                    dialog.dismiss();
+                    ((MainActivity) bridge.getActivity()).openInMain(uri.toString());
+                    return true;
+                }
                 if (staysInApp(uri)) {
                     firstLoad = false;
                     return false;

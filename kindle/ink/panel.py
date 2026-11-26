@@ -46,7 +46,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ink import claude, config, dictate
+from ink import claude, config, dictate, tmux_chat
 
 ASSETS = Path(__file__).with_name("assets")
 CACHE_DIR = config.CACHE_DIR / "chats"
@@ -419,8 +419,20 @@ def _older(chat, items):
 
 
 def send(session, text):
-    """The message into the chat, as the phone app sends it. A chat of this machine's folders that stopped
-    (reboot, idle) is brought back first, so the message has a Claude to go to."""
+    """Send a message into the chat. Interactive CLI chats running in tmux receive the text as local
+    terminal input (no peer label); other chats fall back to Anthropic's sessions API, bringing a stopped
+    folder chat back first."""
+    pane = tmux_chat.find_pane(session)
+    if pane:
+        tmux_chat.send_to_pane(pane, text)
+        return
+    try:
+        pane = tmux_chat.resume(session)
+        if pane:
+            tmux_chat.send_to_pane(pane, text)
+            return
+    except RuntimeError:
+        pass
     try:
         found = claude.lookup(session)
         if found and not found["running"]:
@@ -436,6 +448,9 @@ def send(session, text):
 
 def stop(session):
     """Interrupt Claude's current turn, as the phone app's stop button does."""
+    pane = tmux_chat.find_pane(session)
+    if pane and tmux_chat.stop_pane(pane):
+        return
     claude.api("POST", f"/v1/sessions/{session}/events", {"events": [{
         "type": "control_request", "request_id": str(uuid.uuid4()), "request": {"subtype": "interrupt"},
         "uuid": str(uuid.uuid4())}]})
@@ -888,7 +903,7 @@ class InkHandler(BaseHTTPRequestHandler):
                 cwd = str(body["cwd"])
                 if cwd not in _folders():
                     raise ValueError
-                return self.send_json(claude.start(cwd))
+                return self.send_json(tmux_chat.start(cwd))
         except (ValueError, KeyError, TypeError):
             return self.send_error(HTTPStatus.BAD_REQUEST)
         except claude.Refused:

@@ -223,7 +223,9 @@ class SendTest(unittest.TestCase):
         account = json.dumps({"oauthAccount": {"organizationUuid": "test-org"}})
         response = mock.MagicMock()
         response.__enter__.return_value.read.return_value = b"{}"
-        with mock.patch.object(ink.claude, "lookup", return_value=None), \
+        with mock.patch.object(ink.tmux_chat, "find_pane", return_value=None), \
+                mock.patch.object(ink.tmux_chat, "resume", return_value=None), \
+                mock.patch.object(ink.claude, "lookup", return_value=None), \
                 mock.patch.object(Path, "read_text", side_effect=[credentials, account]), \
                 mock.patch.object(ink.claude.urllib.request, "urlopen", return_value=response) as opened:
             ink.send("session_Test", "Hello from Kindle")
@@ -234,8 +236,65 @@ class SendTest(unittest.TestCase):
         self.assertEqual(event["message"]["content"], "Hello from Kindle")
         self.assertNotIn("client_platform", event)
 
+    def test_send_uses_live_tmux_pane_without_calling_api(self):
+        with mock.patch.object(ink.tmux_chat, "find_pane", return_value="%7"), \
+                mock.patch.object(ink.tmux_chat, "send_to_pane") as send_pane, \
+                mock.patch.object(ink.claude, "api") as api:
+            ink.send("session_Test", "Line 1\nLine 2")
+        send_pane.assert_called_once_with("%7", "Line 1\nLine 2")
+        api.assert_not_called()
+
+    def test_send_resumes_stopped_tmux_session(self):
+        with mock.patch.object(ink.tmux_chat, "find_pane", return_value=None), \
+                mock.patch.object(ink.tmux_chat, "resume", return_value="%9"), \
+                mock.patch.object(ink.tmux_chat, "send_to_pane") as send_pane, \
+                mock.patch.object(ink.claude, "api") as api:
+            ink.send("session_Test", "Back again")
+        send_pane.assert_called_once_with("%9", "Back again")
+        api.assert_not_called()
+
+    def test_find_pane_only_matches_interactive_cli(self):
+        with tempfile.TemporaryDirectory() as d:
+            sessions = Path(d) / "sessions"
+            sessions.mkdir()
+            (sessions / "1.json").write_text(json.dumps({
+                "pid": 1, "entrypoint": "sdk-cli", "tmux": "rcf-1:@0.%1",
+                "bridgeSessionId": "session_Sdk", "cwd": "/tmp", "sessionId": "uuid-1",
+            }))
+            (sessions / "2.json").write_text(json.dumps({
+                "pid": 2, "entrypoint": "cli", "tmux": "ink-abc:@3.%12",
+                "bridgeSessionId": "session_Cli", "cwd": "/tmp", "sessionId": "uuid-2",
+            }))
+            with mock.patch.object(ink.tmux_chat.config, "CLAUDE_DIR", Path(d)), \
+                    mock.patch.object(ink.tmux_chat.config, "CACHE_DIR", Path(d)), \
+                    mock.patch.object(ink.tmux_chat, "_alive", return_value=True), \
+                    mock.patch.object(ink.tmux_chat, "_pane_alive", return_value=True):
+                self.assertIsNone(ink.tmux_chat.find_pane("session_Sdk"))
+                self.assertEqual(ink.tmux_chat.find_pane("session_Cli"), "%12")
+                self.assertEqual(ink.tmux_chat._known("session_Cli"), {"cwd": "/tmp", "uuid": "uuid-2"})
+
+    def test_send_to_pane_uses_bracketed_paste_and_enter(self):
+        ok = mock.Mock(returncode=0, stdout=b"", stderr=b"")
+        with mock.patch.object(ink.tmux_chat, "_tmux", return_value=ok) as tmux_call, \
+                mock.patch.object(ink.tmux_chat.time, "sleep"):
+            ink.tmux_chat.send_to_pane("%5", "hello\nworld")
+        cmds = [c.args[0] for c in tmux_call.call_args_list]
+        self.assertEqual(cmds, ["load-buffer", "paste-buffer", "send-keys"])
+        self.assertEqual(tmux_call.call_args_list[0].kwargs["input_bytes"], b"hello\nworld")
+        self.assertIn("-p", tmux_call.call_args_list[1].args)
+        self.assertEqual(tmux_call.call_args_list[2].args, ("send-keys", "-t", "%5", "Enter"))
+
+    def test_stop_uses_tmux_pane_when_live(self):
+        with mock.patch.object(ink.tmux_chat, "find_pane", return_value="%5"), \
+                mock.patch.object(ink.tmux_chat, "stop_pane", return_value=True) as stop_pane, \
+                mock.patch.object(ink.claude, "api") as api:
+            ink.stop("session_Test")
+        stop_pane.assert_called_once_with("%5")
+        api.assert_not_called()
+
     def test_stop_interrupts(self):
-        with mock.patch.object(ink.claude, "api") as api:
+        with mock.patch.object(ink.tmux_chat, "find_pane", return_value=None), \
+                mock.patch.object(ink.claude, "api") as api:
             ink.stop("session_Test")
         method, path, body = api.call_args.args
         self.assertEqual((method, path), ("POST", "/v1/sessions/session_Test/events"))
